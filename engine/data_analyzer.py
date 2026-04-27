@@ -99,6 +99,40 @@ class DataAnalyzer:
         
         logger.info(f"过滤后剩余 {len(filtered)} 条记录")
         return filtered
+
+    def _build_trip_key(self, record):
+        """构建行程匹配键，用于识别已退票/已改签的购票记录"""
+        return (
+            record.get('passenger_name') or '',
+            record.get('train_number') or '',
+            record.get('departure_station') or '',
+            record.get('arrival_station') or '',
+            record.get('departure_datetime') or '',
+            record.get('seat_type') or '',
+            round(float(record.get('price', 0) or 0), 2),
+        )
+
+    def _get_effective_purchase_records(self, records):
+        """
+        获取有效出行记录
+        已退票、已改签对应的原购票记录不再计入出行次数、城市、路线、座位等统计
+        """
+        purchase_records = [r for r in records if r.get('type') == 'purchase']
+        canceled_records = [r for r in records if r.get('type') in ('refund', 'change')]
+
+        canceled_counter = Counter()
+        for record in canceled_records:
+            canceled_counter[self._build_trip_key(record)] += 1
+
+        effective_records = []
+        for record in purchase_records:
+            key = self._build_trip_key(record)
+            if canceled_counter[key] > 0:
+                canceled_counter[key] -= 1
+                continue
+            effective_records.append(record)
+
+        return effective_records
     
     def get_overview_stats(self, records=None):
         """
@@ -113,6 +147,7 @@ class DataAnalyzer:
             return {}
         
         purchase_records = [r for r in records if r.get('type') == 'purchase']
+        effective_purchase_records = self._get_effective_purchase_records(records)
         refund_records = [r for r in records if r.get('type') == 'refund']
         change_records = [r for r in records if r.get('type') == 'change']
         
@@ -132,7 +167,8 @@ class DataAnalyzer:
         
         stats = {
             'total_records': len(records),
-            'purchase_count': len(purchase_records),
+            'purchase_count': len(effective_purchase_records),
+            'ticket_purchase_count': len(purchase_records),
             'refund_count': len(refund_records),
             'change_count': len(change_records),
             'total_spent': total_spent,
@@ -174,6 +210,7 @@ class DataAnalyzer:
             year_records = yearly_data[year]
             
             purchase_records = [r for r in year_records if r.get('type') == 'purchase']
+            effective_purchase_records = self._get_effective_purchase_records(year_records)
             refund_records = [r for r in year_records if r.get('type') == 'refund']
             change_records = [r for r in year_records if r.get('type') == 'change']
             
@@ -192,7 +229,7 @@ class DataAnalyzer:
             
             stat = {
                 'year': year,
-                'total_trips': len(purchase_records),
+                'total_trips': len(effective_purchase_records),
                 'refund_count': len(refund_records),
                 'total_spent': total_spent,
                 'total_refunded': total_refunded,
@@ -218,15 +255,14 @@ class DataAnalyzer:
         if not records:
             return []
         
+        purchase_records = self._get_effective_purchase_records(records)
+
         # 统计出发城市
         departure_counter = Counter()
         arrival_counter = Counter()
         city_pair_counter = Counter()
         
-        for record in records:
-            if record.get('type') != 'purchase':
-                continue
-            
+        for record in purchase_records:
             dep_station = record.get('departure_station', '')
             arr_station = record.get('arrival_station', '')
             
@@ -285,8 +321,7 @@ class DataAnalyzer:
         if not records:
             return []
         
-        # 只统计购票记录
-        purchase_records = [r for r in records if r.get('type') == 'purchase']
+        purchase_records = self._get_effective_purchase_records(records)
         
         train_counter = Counter()
         train_prices = defaultdict(list)
@@ -323,7 +358,7 @@ class DataAnalyzer:
         if not records:
             return []
         
-        purchase_records = [r for r in records if r.get('type') == 'purchase']
+        purchase_records = self._get_effective_purchase_records(records)
         
         seat_counter = Counter()
         seat_prices = defaultdict(list)
@@ -363,7 +398,7 @@ class DataAnalyzer:
         if not records:
             return []
         
-        purchase_records = [r for r in records if r.get('type') == 'purchase']
+        purchase_records = self._get_effective_purchase_records(records)
         
         if year:
             purchase_records = [r for r in purchase_records if r.get('_year') == year]
@@ -402,7 +437,7 @@ class DataAnalyzer:
         if not records:
             return []
         
-        purchase_records = [r for r in records if r.get('type') == 'purchase']
+        purchase_records = self._get_effective_purchase_records(records)
         
         passenger_counter = Counter()
         passenger_prices = defaultdict(list)

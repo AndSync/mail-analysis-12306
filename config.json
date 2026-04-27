@@ -12,6 +12,7 @@
   "smtp_port": 465,
   "default_combined": true,
   "analysis": {
+    "mailbox_name": "网上购票",
     "max_emails": 10000,
     "start_year": null,
     "end_year": null,

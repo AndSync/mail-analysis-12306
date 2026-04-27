@@ -58,24 +58,14 @@ def main():
         return
     
     try:
-        # 选择邮箱文件夹（可选配置）
         mailbox_name = config.get('analysis', {}).get('mailbox_name', None)
-        
-        # 如果配置为空字符串，也视为未指定
         if mailbox_name == '':
             mailbox_name = None
-        
+
         if mailbox_name:
-            logger.info(f"✓ 配置指定文件夹: {mailbox_name}（推荐，速度更快）")
-            mail_count = mail_reader.select_mailbox(mailbox_name)
-            
-            if mail_count == 0:
-                logger.warning(f"邮箱文件夹 '{mailbox_name}' 中没有邮件")
-                logger.info("将改为搜索收件箱...")
-                mailbox_name = None
+            logger.info(f"✓ 当前策略：优先扫描指定文件夹 {mailbox_name}")
         else:
-            logger.info("⚠ 未指定文件夹，默认搜索收件箱（INBOX）")
-            logger.info("💡 提示：如果12306邮件在其他文件夹，请在config.json中配置mailbox_name")
+            logger.info("✓ 当前策略：未指定文件夹，默认扫描全邮箱文件夹，再本地筛选 12306 邮件")
         
         # 获取日期范围配置
         analysis_config = config.get('analysis', {})

@@ -54,6 +54,22 @@ class EmailParser:
     """邮件解析器"""
     
     def __init__(self):
+        self.seat_aliases = [
+            ('商务座', '商务座'),
+            ('特等座', '特等座'),
+            ('一等卧', '高级软卧'),
+            ('高级软卧', '高级软卧'),
+            ('软卧', '软卧'),
+            ('硬卧', '硬卧'),
+            ('动卧', '动卧'),
+            ('一等座', '一等座'),
+            ('二等座', '二等座'),
+            ('二等包座', '二等座'),
+            ('软座', '软座'),
+            ('硬座', '硬座'),
+            ('无座', '无座'),
+        ]
+
         # 定义正则表达式模式
         self.patterns = {
             'order_number': r'订单号[:：]\s*([A-Z0-9]+)',
@@ -66,6 +82,88 @@ class EmailParser:
             'passenger_name': r'乘车人[:：]\s*([\u4e00-\u9fa5·]{2,4})',
             'ticket_status': r'(已支付|已退票|已改签|出票成功|订票成功|退票成功|改签成功)',
         }
+
+    def _normalize_seat_type(self, seat_type):
+        """标准化座位类型"""
+        if not seat_type:
+            return None
+
+        value = re.sub(r'\s+', '', seat_type)
+        value = value.replace('新空调', '').replace('空调', '')
+        value = value.replace('新空', '')
+        value = value.replace('座票', '座').replace('卧铺票', '卧')
+        value = value.replace('二等包', '二等')
+
+        if any(flag in value for flag in ['上铺', '中铺', '下铺']):
+            if '硬' in value:
+                return '硬卧'
+            if '软' in value or '高级' in value:
+                return '软卧'
+            if '动' in value:
+                return '动卧'
+            if '卧铺' in value:
+                return '卧铺'
+
+        for raw, normalized in self.seat_aliases:
+            if raw in value:
+                return normalized
+
+        if '卧' in value:
+            if '高级' in value:
+                return '高级软卧'
+            if '软' in value:
+                return '软卧'
+            if '硬' in value:
+                return '硬卧'
+            if '动' in value:
+                return '动卧'
+            if '卧铺' in value:
+                return '卧铺'
+
+        if '座' in value:
+            if '商务' in value:
+                return '商务座'
+            if '特等' in value:
+                return '特等座'
+            if '一等' in value:
+                return '一等座'
+            if '二等' in value:
+                return '二等座'
+            if '软' in value:
+                return '软座'
+            if '硬' in value:
+                return '硬座'
+
+        if value == '无':
+            return '无座'
+
+        return seat_type.strip()
+
+    def _extract_seat_type_from_text(self, text):
+        """从文本中优先提取标准席别，再兜底提取铺位描述"""
+        if not text:
+            return None
+
+        primary_match = re.search(
+            r'(商务座|特等座|高级软卧|一等座|二等座|二等包座|软卧|硬卧|动卧|软座|硬座|无座)',
+            text
+        )
+        if primary_match:
+            return self._normalize_seat_type(primary_match.group(1))
+
+        berth_match = re.search(r'([\u4e00-\u9fa5]*?(?:上|中|下)铺)', text)
+        if berth_match:
+            berth_value = berth_match.group(1)
+            if berth_value.startswith('号'):
+                berth_value = berth_value[1:]
+            if '卧铺' in text:
+                berth_value = f"卧铺{berth_value}"
+            return self._normalize_seat_type(berth_value)
+
+        if '卧铺' in text:
+            return '卧铺'
+
+        return None
     
     def parse_emails(self, emails_data):
         """
@@ -109,6 +207,12 @@ class EmailParser:
         subject = email_data.get('subject', '')
         body = email_data.get('body', '')
         date_str = email_data.get('date', '')
+        clean_body = self._strip_html_tags(body)
+        common_info = self._extract_with_regex(clean_body)
+        if body and '<' in body and '>' in body:
+            html_info = self._extract_from_html(body)
+            for key, value in html_info.items():
+                common_info.setdefault(key, value)
         
         # 判断邮件类型
         ticket_type = self._detect_ticket_type(subject, body)
@@ -122,10 +226,13 @@ class EmailParser:
             all_passengers = self._extract_all_passengers(body, ticket_type)
             
             if not all_passengers:
-                # 如果是退票或改签但没有提取到乘客信息，记录警告
-                if ticket_type in ['refund', 'change']:
-                    logger.warning(f"{ticket_type}邮件未提取到乘客信息，主题: {subject[:50]}")
-                return []
+                if common_info:
+                    all_passengers = [common_info]
+                else:
+                    # 如果是退票或改签但没有提取到乘客信息，记录警告
+                    if ticket_type in ['refund', 'change']:
+                        logger.warning(f"{ticket_type}邮件未提取到乘客信息，主题: {subject[:50]}")
+                    return []
             
             # 为每个乘客创建一条记录
             records = []
@@ -136,7 +243,11 @@ class EmailParser:
                     'date': self._parse_date(date_str),
                     'raw_body': body[:500]  # 保存部分原始内容用于调试
                 }
+                for key, value in common_info.items():
+                    record.setdefault(key, value)
                 record.update(passenger_info)
+                if record.get('seat_type'):
+                    record['seat_type'] = self._normalize_seat_type(record['seat_type'])
                 
                 # 处理旧版邮件的日期（没有年份的情况）
                 if 'departure_date_partial' in passenger_info and record.get('date'):
@@ -375,21 +486,8 @@ class EmailParser:
             info['price'] = float(prices[-1])
         
         # 提取座位类型
-        seat_match = re.search(r'(硬卧|软卧|动卧|硬座|软座|商务座|特等座|一等座|二等座|无座|[\u4e00-\u9fa5]+?(?:上|中|下)铺)', line)
-        if seat_match:
-            seat_type = seat_match.group(1)
-            # 标准化座位类型
-            if '上铺' in seat_type or '中铺' in seat_type or '下铺' in seat_type:
-                # 判断是硬卧还是软卧还是动卧
-                if '硬' in seat_type:
-                    seat_type = '硬卧'
-                elif '软' in seat_type:
-                    seat_type = '软卧'
-                elif '动' in seat_type:
-                    seat_type = '动卧'
-                else:
-                    # 无法判断，保留原值
-                    pass
+        seat_type = self._extract_seat_type_from_text(line)
+        if seat_type:
             info['seat_type'] = seat_type
         
         # 提取车厢和座位号
@@ -474,21 +572,8 @@ class EmailParser:
         # 提取座位类型（支持多种格式）
         # 新格式：二等座，成人票
         # 旧格式：硬座
-        match = re.search(r'(硬卧|软卧|动卧|硬座|软座|商务座|特等座|一等座|二等座|无座|[\u4e00-\u9fa5]+?(?:上|中|下)铺)', text)
-        if match:
-            seat_type = match.group(1)
-            # 标准化座位类型
-            if '上铺' in seat_type or '中铺' in seat_type or '下铺' in seat_type:
-                # 判断是硬卧还是软卧还是动卧
-                if '硬' in seat_type:
-                    seat_type = '硬卧'
-                elif '软' in seat_type:
-                    seat_type = '软卧'
-                elif '动' in seat_type:
-                    seat_type = '动卧'
-                else:
-                    # 无法判断，保留原值
-                    pass
+        seat_type = self._extract_seat_type_from_text(text)
+        if seat_type:
             info['seat_type'] = seat_type
         
         # 提取乘客姓名（支持多种格式）
@@ -560,7 +645,7 @@ class EmailParser:
                     if '席别' in text_combined or '座位' in text_combined or '舱位' in text_combined:
                         for cell in cell_texts:
                             if any(seat in cell for seat in ['座', '卧']):
-                                info['seat_type'] = cell
+                                info['seat_type'] = self._normalize_seat_type(cell)
         except Exception as e:
             logger.debug(f"HTML解析失败: {e}")
         

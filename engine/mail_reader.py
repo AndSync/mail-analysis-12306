@@ -6,6 +6,7 @@ import email
 from email.header import decode_header
 import time
 import logging
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class MailReader:
         self.username = config['email']['sender_email']
         self.password = config['email']['sender_password']
         self.mailbox = None
+        self._mailboxes_cache = None
     
     def connect(self):
         """连接到IMAP服务器"""
@@ -41,6 +43,193 @@ class MailReader:
         if self.mailbox:
             self.mailbox.logout()
             logger.info("已断开连接")
+
+    def _encode_mailbox_name(self, mailbox_name):
+        """将文件夹名编码为 IMAP Modified UTF-7"""
+        if not mailbox_name:
+            return mailbox_name
+
+        result = []
+        buffer = []
+
+        def flush_buffer():
+            if not buffer:
+                return
+            raw = ''.join(buffer).encode('utf-16-be')
+            encoded = base64.b64encode(raw).decode('ascii').rstrip('=').replace('/', ',')
+            result.append(f"&{encoded}-")
+            buffer.clear()
+
+        for char in mailbox_name:
+            code = ord(char)
+            if 0x20 <= code <= 0x7E and char != '&':
+                flush_buffer()
+                result.append(char)
+            elif char == '&':
+                flush_buffer()
+                result.append('&-')
+            else:
+                buffer.append(char)
+
+        flush_buffer()
+        return ''.join(result)
+
+    def _decode_mailbox_name(self, mailbox_name):
+        """将 IMAP Modified UTF-7 解码为可读文件夹名"""
+        if not mailbox_name or '&' not in mailbox_name:
+            return mailbox_name
+
+        result = []
+        i = 0
+        length = len(mailbox_name)
+
+        while i < length:
+            char = mailbox_name[i]
+            if char != '&':
+                result.append(char)
+                i += 1
+                continue
+
+            end = mailbox_name.find('-', i)
+            if end == -1:
+                result.append(mailbox_name[i:])
+                break
+
+            token = mailbox_name[i + 1:end]
+            if token == '':
+                result.append('&')
+            else:
+                token = token.replace(',', '/')
+                padding = '=' * ((4 - len(token) % 4) % 4)
+                decoded = base64.b64decode(token + padding)
+                result.append(decoded.decode('utf-16-be'))
+            i = end + 1
+
+        return ''.join(result)
+
+    def _get_mailbox_aliases(self, mailbox_name):
+        """返回可用于匹配的多个文件夹别名"""
+        aliases = {mailbox_name}
+        if mailbox_name:
+            aliases.add(self._encode_mailbox_name(mailbox_name))
+            aliases.add(self._decode_mailbox_name(mailbox_name))
+            if '/' in mailbox_name:
+                aliases.add(mailbox_name.split('/')[-1])
+        return {alias for alias in aliases if alias}
+
+    def _resolve_mailbox_name(self, mailbox_name):
+        """
+        解析文件夹名称，兼容中文名、IMAP 编码名和 QQ 邮箱返回的实际名称
+        :return: (display_name, server_name)
+        """
+        mailboxes = self._mailboxes_cache or self.list_all_mailboxes()
+        self._mailboxes_cache = mailboxes
+
+        candidates = list(self._get_mailbox_aliases(mailbox_name))
+
+        for candidate in candidates:
+            if candidate in mailboxes:
+                return mailbox_name, candidate
+
+        for existing in mailboxes:
+            decoded_existing = self._decode_mailbox_name(existing)
+            existing_aliases = self._get_mailbox_aliases(decoded_existing) | {existing}
+            if any(existing.endswith(candidate) for candidate in candidates):
+                return decoded_existing, existing
+            if candidates and existing_aliases.intersection(candidates):
+                return decoded_existing, existing
+
+        return mailbox_name, self._encode_mailbox_name(mailbox_name)
+
+    def _build_search_criteria(self, start_date=None, end_date=None):
+        """构建搜索条件，避免使用 FROM 服务端过滤导致老邮件漏查"""
+        filters = []
+        if start_date:
+            filters.append(f'SINCE "{start_date}"')
+        if end_date:
+            filters.append(f'BEFORE "{end_date}"')
+
+        if not filters:
+            return 'ALL'
+
+        if len(filters) == 1:
+            return filters[0]
+
+        return f"({' '.join(filters)})"
+
+    def _is_12306_email(self, email_data):
+        """在本地判断是否为 12306 相关邮件"""
+        if not email_data:
+            return False
+
+        from_addr = (email_data.get('from') or '').lower()
+        subject = email_data.get('subject') or ''
+        body = email_data.get('body') or ''
+        text = f"{subject}\n{body}".lower()
+
+        sender_keywords = [
+            '12306@rails.com.cn',
+            '12306.cn',
+            '中国铁路客户服务中心',
+        ]
+        text_keywords = [
+            '12306',
+            '订票',
+            '购票',
+            '出票',
+            '退票',
+            '改签',
+            '候补',
+            '车次',
+            '席别',
+            '订单号',
+        ]
+
+        if any(keyword in from_addr for keyword in sender_keywords):
+            return True
+
+        if '12306' in from_addr:
+            return True
+
+        return any(keyword in text for keyword in text_keywords)
+
+    def _fetch_email_headers(self, email_id):
+        """仅获取邮件头，便于快速过滤候选邮件"""
+        try:
+            status, msg_data = self.mailbox.fetch(
+                email_id,
+                '(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])'
+            )
+            if status != 'OK' or not msg_data or not msg_data[0]:
+                return None
+
+            raw_header = msg_data[0][1]
+            if not raw_header:
+                return None
+
+            header_message = email.message_from_bytes(raw_header)
+            return {
+                'subject': self._decode_header_value(header_message['Subject']),
+                'from': self._decode_header_value(header_message['From']),
+                'date': header_message['Date'] or '',
+                'body': ''
+            }
+        except Exception as e:
+            logger.debug(f"获取邮件头失败 {email_id}: {e}")
+            return None
+
+    def _fetch_full_email(self, email_id):
+        """获取完整邮件内容"""
+        status, msg_data = self.mailbox.fetch(email_id, '(RFC822)')
+        if status != 'OK' or not msg_data or not msg_data[0]:
+            return None
+
+        raw_email = msg_data[0][1]
+        if not raw_email:
+            return None
+
+        email_message = email.message_from_bytes(raw_email)
+        return self._parse_email(email_message)
     
     def select_mailbox(self, mailbox_name='INBOX'):
         """
@@ -48,22 +237,11 @@ class MailReader:
         :param mailbox_name: 邮箱文件夹名称
         """
         try:
-            # 处理中文文件夹名称编码问题（QQ邮箱使用Modified UTF-7）
-            try:
-                # 尝试将中文转换为 IMAP 的 UTF-7 编码
-                if any(ord(c) > 127 for c in mailbox_name):
-                    # 包含中文字符，需要编码
-                    mailbox_name_encoded = mailbox_name.encode('utf-7').decode('ascii').replace('+', '&').rstrip('=')
-                    logger.debug(f"文件夹名称编码: {mailbox_name} -> {mailbox_name_encoded}")
-                    status, messages = self.mailbox.select(mailbox_name_encoded)
-                else:
-                    status, messages = self.mailbox.select(mailbox_name)
-            except Exception as encode_error:
-                logger.debug(f"文件夹名称编码失败，使用原始名称: {encode_error}")
-                status, messages = self.mailbox.select(mailbox_name)
+            display_name, server_name = self._resolve_mailbox_name(mailbox_name)
+            status, messages = self.mailbox.select(server_name, readonly=True)
             
             if status == 'OK':
-                logger.info(f"已选择邮箱文件夹: {mailbox_name}, 邮件数量: {messages[0]}")
+                logger.info(f"已选择邮箱文件夹: {display_name} [{server_name}], 邮件数量: {messages[0]}")
                 return int(messages[0])
             else:
                 logger.error(f"选择邮箱文件夹失败: {messages}")
@@ -100,6 +278,7 @@ class MailReader:
                         mailbox_list.append(folder_name)
             
             logger.info(f"找到 {len(mailbox_list)} 个文件夹: {mailbox_list}")
+            self._mailboxes_cache = mailbox_list
             return mailbox_list
         except Exception as e:
             logger.error(f"获取文件夹列表异常: {e}")
@@ -118,9 +297,10 @@ class MailReader:
         
         try:
             # 选择文件夹
-            status, messages = self.mailbox.select(mailbox_name)
+            display_name, server_name = self._resolve_mailbox_name(mailbox_name)
+            status, messages = self.mailbox.select(server_name, readonly=True)
             if status != 'OK':
-                logger.warning(f"无法选择文件夹 {mailbox_name}，跳过")
+                logger.warning(f"无法选择文件夹 {display_name} [{server_name}]，跳过")
                 return emails_data
             
             mail_count = int(messages[0])
@@ -128,23 +308,13 @@ class MailReader:
                 logger.debug(f"文件夹 {mailbox_name} 中没有邮件")
                 return emails_data
             
-            # 构建搜索条件 - 通过发件人过滤12306邮件
-            # 注意：IMAP协议不支持中文搜索条件，只能使用英文
-            # 默认搜索发件人 12306@rails.com.cn
-            search_criteria = '(FROM "12306@rails.com.cn")'
-            
-            if start_date and end_date:
-                search_criteria = f'(SINCE "{start_date}" BEFORE "{end_date}" {search_criteria})'
-            elif start_date:
-                search_criteria = f'(SINCE "{start_date}" {search_criteria})'
-            elif end_date:
-                search_criteria = f'(BEFORE "{end_date}" {search_criteria})'
+            search_criteria = self._build_search_criteria(start_date, end_date)
             
             logger.debug(f"搜索条件: {search_criteria}")
             status, messages = self.mailbox.search(None, search_criteria)
             
             if status != 'OK':
-                logger.warning(f"在文件夹 {mailbox_name} 中搜索失败")
+                logger.warning(f"在文件夹 {display_name} 中搜索失败")
                 return emails_data
             
             email_ids = messages[0].split()
@@ -152,41 +322,45 @@ class MailReader:
                 return emails_data
             
             total_emails = len(email_ids)
-            logger.info(f"文件夹 {mailbox_name}: 找到 {total_emails} 封12306相关邮件")
+            logger.info(f"文件夹 {display_name}: 服务端命中 {total_emails} 封候选邮件")
             
             # 限制处理数量
             if limit and total_emails > limit:
                 email_ids = email_ids[-limit:]
-                logger.info(f"文件夹 {mailbox_name}: 限制处理 {len(email_ids)} 封邮件")
+                logger.info(f"文件夹 {display_name}: 限制处理 {len(email_ids)} 封候选邮件")
             
+            candidate_ids = []
             for idx, email_id in enumerate(email_ids):
                 try:
-                    status, msg_data = self.mailbox.fetch(email_id, '(RFC822)')
-                    
-                    if status != 'OK':
-                        continue
-                    
-                    raw_email = msg_data[0][1]
-                    email_message = email.message_from_bytes(raw_email)
-                    
-                    # 解析邮件内容
-                    email_data = self._parse_email(email_message)
-                    
-                    if email_data:
-                        emails_data.append(email_data)
-                    
-                    # 每处理50封邮件打印一次进度
+                    header_data = self._fetch_email_headers(email_id)
+                    if header_data and self._is_12306_email(header_data):
+                        candidate_ids.append(email_id)
+
                     if (idx + 1) % 50 == 0:
-                        logger.info(f"已处理 {idx + 1}/{len(email_ids)} 封邮件")
-                    
-                    # 避免请求过快
-                    time.sleep(0.02)
-                    
+                        logger.info(f"已扫描头部 {idx + 1}/{len(email_ids)} 封邮件")
+
+                    time.sleep(0.005)
                 except Exception as e:
-                    logger.error(f"处理邮件 {email_id} 时出错: {e}")
+                    logger.error(f"扫描邮件头 {email_id} 时出错: {e}")
+                    continue
+
+            logger.info(f"文件夹 {display_name}: 头部筛出 {len(candidate_ids)} 封12306候选邮件")
+
+            for idx, email_id in enumerate(candidate_ids):
+                try:
+                    email_data = self._fetch_full_email(email_id)
+                    if email_data and self._is_12306_email(email_data):
+                        emails_data.append(email_data)
+
+                    if (idx + 1) % 50 == 0:
+                        logger.info(f"已获取正文 {idx + 1}/{len(candidate_ids)} 封邮件")
+
+                    time.sleep(0.02)
+                except Exception as e:
+                    logger.error(f"获取完整邮件 {email_id} 时出错: {e}")
                     continue
             
-            logger.info(f"文件夹 {mailbox_name}: 成功解析 {len(emails_data)} 封有效邮件")
+            logger.info(f"文件夹 {display_name}: 成功筛出 {len(emails_data)} 封12306有效邮件")
             return emails_data
             
         except Exception as e:
@@ -203,58 +377,56 @@ class MailReader:
         :return: 邮件列表
         """
         all_emails_data = []
-        
-        # 如果指定了文件夹，只搜索该文件夹
+        seen_keys = set()
+
+        def extend_unique(items):
+            for item in items:
+                key = (
+                    item.get('date') or '',
+                    item.get('subject') or '',
+                    item.get('from') or '',
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                all_emails_data.append(item)
+
         if mailbox_name:
-            logger.info(f"在指定文件夹 '{mailbox_name}' 中搜索...")
-            all_emails_data = self.search_12306_emails_in_mailbox(
+            logger.info(f"开始搜索指定文件夹: {mailbox_name}")
+            extend_unique(self.search_12306_emails_in_mailbox(
                 mailbox_name, start_date, end_date, limit
-            )
+            ))
         else:
-            # 默认搜索收件箱（INBOX）
-            logger.info("未指定文件夹，搜索收件箱（INBOX）...")
-            all_emails_data = self.search_12306_emails_in_mailbox(
-                'INBOX', start_date, end_date, limit
-            )
-            
-            # 如果收件箱没有找到，尝试搜索所有文件夹
-            if not all_emails_data:
-                logger.info("收件箱未找到邮件，尝试搜索所有文件夹...")
-                mailboxes = self.list_all_mailboxes()
-                
-                if not mailboxes:
-                    logger.error("无法获取文件夹列表")
-                    return all_emails_data
-                
-                total_processed = 0
-                for idx, mailbox in enumerate(mailboxes):
-                    # 跳过已经搜索过的 INBOX
-                    if mailbox == 'INBOX':
-                        continue
-                    
-                    logger.info(f"\n正在搜索文件夹 [{idx+1}/{len(mailboxes)}]: {mailbox}")
-                    
-                    # 计算当前文件夹的限制数量
-                    remaining_limit = limit - len(all_emails_data) if limit else None
-                    
-                    if remaining_limit is not None and remaining_limit <= 0:
-                        logger.info(f"已达到邮件数量限制 {limit}，停止搜索")
-                        break
-                    
-                    folder_emails = self.search_12306_emails_in_mailbox(
-                        mailbox, start_date, end_date, remaining_limit
-                    )
-                    
-                    all_emails_data.extend(folder_emails)
-                    total_processed += 1
-                    
-                    logger.info(f"累计获取 {len(all_emails_data)} 封邮件")
-                    
-                    # 文件夹之间稍作延迟
-                    if idx < len(mailboxes) - 1:
-                        time.sleep(0.5)
-                
-                logger.info(f"\n共搜索 {total_processed} 个文件夹")
+            logger.info("开始搜索所有文件夹（含 INBOX）...")
+            mailboxes = self.list_all_mailboxes()
+
+            if not mailboxes:
+                logger.error("无法获取文件夹列表")
+                return all_emails_data
+
+            ordered_mailboxes = ['INBOX'] + [box for box in mailboxes if box != 'INBOX']
+            total_processed = 0
+
+            for idx, mailbox in enumerate(ordered_mailboxes):
+                logger.info(f"\n正在搜索文件夹 [{idx + 1}/{len(ordered_mailboxes)}]: {mailbox}")
+
+                remaining_limit = limit - len(all_emails_data) if limit else None
+                if remaining_limit is not None and remaining_limit <= 0:
+                    logger.info(f"已达到邮件数量限制 {limit}，停止搜索")
+                    break
+
+                folder_emails = self.search_12306_emails_in_mailbox(
+                    mailbox, start_date, end_date, remaining_limit
+                )
+
+                extend_unique(folder_emails)
+                total_processed += 1
+                logger.info(f"累计获取 {len(all_emails_data)} 封邮件")
+
+                if idx < len(ordered_mailboxes) - 1:
+                    time.sleep(0.2)
+
+            logger.info(f"\n共搜索 {total_processed} 个文件夹")
         
         logger.info(f"\n总计成功解析 {len(all_emails_data)} 封有效邮件")
         return all_emails_data
