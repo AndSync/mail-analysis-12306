@@ -102,7 +102,7 @@ class EmailParser:
             if '动' in value:
                 return '动卧'
             if '卧铺' in value:
-                return '卧铺'
+                return None
 
         for raw, normalized in self.seat_aliases:
             if raw in value:
@@ -118,7 +118,7 @@ class EmailParser:
             if '动' in value:
                 return '动卧'
             if '卧铺' in value:
-                return '卧铺'
+                return None
 
         if '座' in value:
             if '商务' in value:
@@ -161,7 +161,7 @@ class EmailParser:
             return self._normalize_seat_type(berth_value)
 
         if '卧铺' in text:
-            return '卧铺'
+            return None
 
         return None
     
@@ -223,7 +223,7 @@ class EmailParser:
         # 根据邮件类型提取具体信息
         if ticket_type in ['purchase', 'refund', 'change']:
             # 提取所有乘客的信息
-            all_passengers = self._extract_all_passengers(body, ticket_type)
+            all_passengers = self._extract_all_passengers(body, ticket_type, clean_body=clean_body)
             
             if not all_passengers:
                 if common_info:
@@ -344,17 +344,18 @@ class EmailParser:
         
         return None
     
-    def _extract_all_passengers(self, body, ticket_type='purchase'):
+    def _extract_all_passengers(self, body, ticket_type='purchase', clean_body=None):
         """
         提取邮件中所有乘客的信息（支持单人/多人订单）
         :param body: 邮件正文（可能是HTML）
         :param ticket_type: 邮件类型
+        :param clean_body: 已清洗的纯文本，避免重复清洗
         :return: 乘客信息列表，每个元素是一个字典
         """
         passengers = []
         
-        # 清理HTML标签，提取纯文本
-        clean_body = self._strip_html_tags(body)
+        if clean_body is None:
+            clean_body = self._strip_html_tags(body)
         
         # 提取所有订单号（一封邮件共用一个订单号）
         order_match = re.search(r'订单号[码:]?\s*([A-Z]\d+)', clean_body)

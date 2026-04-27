@@ -275,9 +275,7 @@ class DataAnalyzer:
                 arrival_counter[arr_city] += 1
             
             if dep_station and arr_station:
-                dep_city = self._extract_city_name(dep_station)
-                arr_city = self._extract_city_name(arr_station)
-                city_pair_counter[f"{dep_city}→{arr_city}"] += 1
+                city_pair_counter[f"{dep_station}→{arr_station}"] += 1
         
         # 合并出发和到达统计
         all_cities = Counter()
@@ -471,9 +469,14 @@ class DataAnalyzer:
         if not station_name:
             return ""
         
+        municipalities = ['北京', '上海', '天津', '重庆', '香港', '澳门']
+        for municipality in municipalities:
+            if station_name.startswith(municipality):
+                return municipality
+
         # 去掉常见后缀（按长度从长到短排序，优先匹配长的）
         city = station_name
-        suffixes = ['火车站', '高铁站', '动车站', '城际站', '东站', '西站', '南站', '北站', '站']
+        suffixes = ['火车站', '高铁站', '动车站', '城际站', '东站', '西站', '南站', '北站', '站', '东', '西', '南', '北']
         
         for suffix in suffixes:
             if city.endswith(suffix):

@@ -31,20 +31,17 @@
 
 **1.1 Modified UTF-7编码处理**
 ```python
-# QQ邮箱中文文件夹使用Modified UTF-7编码
-# "网上购票" → "&UXZO1mWHTvZZOQ-/&U05OOl8AU9GABYBUdt8-"
-# IMAP协议要求使用UTF-7，Python的imaplib自动处理
+# QQ邮箱中文文件夹使用 IMAP Modified UTF-7 编码
+# 现在支持中文文件夹名自动转码并匹配
+# "网上购票" -> "&f1FOCo0teWg-"
 ```
 
 **1.2 搜索策略**
 ```python
-# 方案1：发件人过滤（快速但可能漏掉旧邮件）
-search_criteria = '(FROM "12306@rails.com.cn")'
+# 指定文件夹时：直接批量拉取完整邮件，速度优先
+search_criteria = 'ALL'
 
-# 方案2：主题过滤（IMAP不支持中文）
-search_criteria = '(SUBJECT "12306")'  # 中文会导致编码错误
-
-# 方案3：全量获取+解析时过滤（最完整但最慢）
+# 未指定文件夹时：全邮箱搜索 + 头部预筛 + 正文获取
 search_criteria = 'ALL'
 ```
 
@@ -68,6 +65,15 @@ try:
         continue
 except Exception:
     logger.warning(f"跳过文件夹 {mailbox_name}")
+```
+
+**1.5 OpenClaw skill 调用方式**
+```text
+用户发送自然语言指令
+    ↓
+OpenClaw 调用本 skill
+    ↓
+main.py 串联完成 读取 → 解析 → 统计 → 生成 → 发送
 ```
 
 ### 2. email_parser.py - 邮件解析模块
@@ -175,8 +181,8 @@ if ticket_type == 'change':
 
 **3.4 热门路线统计**
 ```python
-# 路线格式：北京→郑州
-route = f"{departure_city}→{arrival_city}"
+# 路线格式：北京西站→郑州站
+route = f"{departure_station}→{arrival_station}"
 route_counter[route] += 1
 
 # 按次数排序

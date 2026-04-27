@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 class MailReader:
     """邮件读取器"""
+
+    TRUST_MAILBOX_BATCH_SIZE = 40
+    HEADER_BATCH_SIZE = 120
     
     def __init__(self, config):
         """
@@ -218,7 +221,48 @@ class MailReader:
             logger.debug(f"获取邮件头失败 {email_id}: {e}")
             return None
 
-    def _fetch_full_email(self, email_id):
+    def _fetch_email_headers_batch(self, email_ids):
+        """批量获取邮件头"""
+        if not email_ids:
+            return []
+
+        ids = []
+        for email_id in email_ids:
+            if isinstance(email_id, bytes):
+                ids.append(email_id.decode('ascii', errors='ignore'))
+            else:
+                ids.append(str(email_id))
+
+        status, msg_data = self.mailbox.fetch(
+            ','.join(ids),
+            '(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])'
+        )
+        if status != 'OK' or not msg_data:
+            return []
+
+        headers = []
+        for item in msg_data:
+            if not isinstance(item, tuple) or len(item) < 2:
+                continue
+
+            raw_header = item[1]
+            if not isinstance(raw_header, (bytes, bytearray)) or not raw_header:
+                continue
+
+            try:
+                header_message = email.message_from_bytes(raw_header)
+                headers.append({
+                    'subject': self._decode_header_value(header_message['Subject']),
+                    'from': self._decode_header_value(header_message['From']),
+                    'date': header_message['Date'] or '',
+                    'body': ''
+                })
+            except Exception as e:
+                logger.debug(f"批量获取邮件头失败: {e}")
+
+        return headers
+
+    def _fetch_full_email(self, email_id, fast_body=False):
         """获取完整邮件内容"""
         status, msg_data = self.mailbox.fetch(email_id, '(RFC822)')
         if status != 'OK' or not msg_data or not msg_data[0]:
@@ -229,7 +273,47 @@ class MailReader:
             return None
 
         email_message = email.message_from_bytes(raw_email)
-        return self._parse_email(email_message)
+        return self._parse_email(email_message, fast_body=fast_body)
+
+    def _chunk_email_ids(self, email_ids, chunk_size):
+        """按批次拆分邮件ID"""
+        for start in range(0, len(email_ids), chunk_size):
+            yield email_ids[start:start + chunk_size]
+
+    def _fetch_full_emails_batch(self, email_ids, fast_body=False):
+        """批量获取完整邮件内容"""
+        if not email_ids:
+            return []
+
+        ids = []
+        for email_id in email_ids:
+            if isinstance(email_id, bytes):
+                ids.append(email_id.decode('ascii', errors='ignore'))
+            else:
+                ids.append(str(email_id))
+
+        status, msg_data = self.mailbox.fetch(','.join(ids), '(RFC822)')
+        if status != 'OK' or not msg_data:
+            return []
+
+        emails_data = []
+        for item in msg_data:
+            if not isinstance(item, tuple) or len(item) < 2:
+                continue
+
+            raw_email = item[1]
+            if not isinstance(raw_email, (bytes, bytearray)) or not raw_email:
+                continue
+
+            try:
+                email_message = email.message_from_bytes(raw_email)
+                email_data = self._parse_email(email_message, fast_body=fast_body)
+                if email_data:
+                    emails_data.append(email_data)
+            except Exception as e:
+                logger.error(f"批量解析邮件失败: {e}")
+
+        return emails_data
     
     def select_mailbox(self, mailbox_name='INBOX'):
         """
@@ -284,13 +368,14 @@ class MailReader:
             logger.error(f"获取文件夹列表异常: {e}")
             return []
     
-    def search_12306_emails_in_mailbox(self, mailbox_name, start_date=None, end_date=None, limit=None):
+    def search_12306_emails_in_mailbox(self, mailbox_name, start_date=None, end_date=None, limit=None, trust_mailbox=False):
         """
         在指定文件夹中搜索12306相关邮件
         :param mailbox_name: 文件夹名称
         :param start_date: 开始日期
         :param end_date: 结束日期
         :param limit: 最大获取邮件数量
+        :param trust_mailbox: 是否信任该文件夹基本都是12306邮件；为True时跳过头部预筛
         :return: 邮件列表
         """
         emails_data = []
@@ -329,36 +414,52 @@ class MailReader:
                 email_ids = email_ids[-limit:]
                 logger.info(f"文件夹 {display_name}: 限制处理 {len(email_ids)} 封候选邮件")
             
-            candidate_ids = []
-            for idx, email_id in enumerate(email_ids):
-                try:
-                    header_data = self._fetch_email_headers(email_id)
-                    if header_data and self._is_12306_email(header_data):
-                        candidate_ids.append(email_id)
+            if trust_mailbox:
+                candidate_ids = email_ids
+                logger.info(f"文件夹 {display_name}: 已启用指定文件夹直读模式，跳过头部预筛")
+            else:
+                candidate_ids = []
+                processed = 0
+                for batch_ids in self._chunk_email_ids(email_ids, self.HEADER_BATCH_SIZE):
+                    try:
+                        header_batch = self._fetch_email_headers_batch(batch_ids)
+                        for email_id, header_data in zip(batch_ids, header_batch):
+                            if header_data and self._is_12306_email(header_data):
+                                candidate_ids.append(email_id)
 
-                    if (idx + 1) % 50 == 0:
-                        logger.info(f"已扫描头部 {idx + 1}/{len(email_ids)} 封邮件")
+                        processed += len(batch_ids)
+                        logger.info(f"已扫描头部 {processed}/{len(email_ids)} 封邮件")
+                        time.sleep(0.002)
+                    except Exception as e:
+                        logger.error(f"批量扫描邮件头时出错: {e}")
+                        continue
 
-                    time.sleep(0.005)
-                except Exception as e:
-                    logger.error(f"扫描邮件头 {email_id} 时出错: {e}")
-                    continue
+                logger.info(f"文件夹 {display_name}: 头部筛出 {len(candidate_ids)} 封12306候选邮件")
 
-            logger.info(f"文件夹 {display_name}: 头部筛出 {len(candidate_ids)} 封12306候选邮件")
+            if trust_mailbox:
+                processed = 0
+                for batch_ids in self._chunk_email_ids(candidate_ids, self.TRUST_MAILBOX_BATCH_SIZE):
+                    try:
+                        batch_emails = self._fetch_full_emails_batch(batch_ids, fast_body=True)
+                        emails_data.extend(batch_emails)
+                        processed += len(batch_ids)
+                        logger.info(f"已批量获取正文 {processed}/{len(candidate_ids)} 封邮件")
+                    except Exception as e:
+                        logger.error(f"批量获取完整邮件失败: {e}")
+            else:
+                for idx, email_id in enumerate(candidate_ids):
+                    try:
+                        email_data = self._fetch_full_email(email_id, fast_body=False)
+                        if email_data and self._is_12306_email(email_data):
+                            emails_data.append(email_data)
 
-            for idx, email_id in enumerate(candidate_ids):
-                try:
-                    email_data = self._fetch_full_email(email_id)
-                    if email_data and self._is_12306_email(email_data):
-                        emails_data.append(email_data)
+                        if (idx + 1) % 50 == 0:
+                            logger.info(f"已获取正文 {idx + 1}/{len(candidate_ids)} 封邮件")
 
-                    if (idx + 1) % 50 == 0:
-                        logger.info(f"已获取正文 {idx + 1}/{len(candidate_ids)} 封邮件")
-
-                    time.sleep(0.02)
-                except Exception as e:
-                    logger.error(f"获取完整邮件 {email_id} 时出错: {e}")
-                    continue
+                        time.sleep(0.01)
+                    except Exception as e:
+                        logger.error(f"获取完整邮件 {email_id} 时出错: {e}")
+                        continue
             
             logger.info(f"文件夹 {display_name}: 成功筛出 {len(emails_data)} 封12306有效邮件")
             return emails_data
@@ -394,7 +495,7 @@ class MailReader:
         if mailbox_name:
             logger.info(f"开始搜索指定文件夹: {mailbox_name}")
             extend_unique(self.search_12306_emails_in_mailbox(
-                mailbox_name, start_date, end_date, limit
+                mailbox_name, start_date, end_date, limit, trust_mailbox=True
             ))
         else:
             logger.info("开始搜索所有文件夹（含 INBOX）...")
@@ -416,7 +517,7 @@ class MailReader:
                     break
 
                 folder_emails = self.search_12306_emails_in_mailbox(
-                    mailbox, start_date, end_date, remaining_limit
+                    mailbox, start_date, end_date, remaining_limit, trust_mailbox=False
                 )
 
                 extend_unique(folder_emails)
@@ -431,10 +532,11 @@ class MailReader:
         logger.info(f"\n总计成功解析 {len(all_emails_data)} 封有效邮件")
         return all_emails_data
     
-    def _parse_email(self, email_message):
+    def _parse_email(self, email_message, fast_body=False):
         """
         解析单封邮件
         :param email_message: 邮件对象
+        :param fast_body: 是否使用更快的正文提取路径
         :return: 解析后的邮件数据字典
         """
         try:
@@ -448,7 +550,7 @@ class MailReader:
             date = email_message['Date']
             
             # 获取邮件正文
-            body = self._get_email_body(email_message)
+            body = self._get_email_body(email_message, fast_mode=fast_body)
             
             return {
                 'subject': subject,
@@ -477,15 +579,41 @@ class MailReader:
         
         return decoded_str
     
-    def _get_email_body(self, email_message):
+    def _get_email_body(self, email_message, fast_mode=False):
         """
         获取邮件正文
         :param email_message: 邮件对象
+        :param fast_mode: 是否使用更快的正文提取路径
         :return: 邮件正文字符串
         """
         body = ""
         
         if email_message.is_multipart():
+            if fast_mode:
+                html_payload = None
+                text_payload = None
+                for part in email_message.walk():
+                    content_disposition = str(part.get("Content-Disposition"))
+                    if "attachment" in content_disposition:
+                        continue
+
+                    payload = part.get_payload(decode=True)
+                    if not payload:
+                        continue
+
+                    content_type = part.get_content_type()
+                    if content_type == "text/html" and html_payload is None:
+                        html_payload = payload
+                        break
+                    if content_type == "text/plain" and text_payload is None:
+                        text_payload = payload
+
+                if html_payload:
+                    return self._decode_with_fallback(html_payload)
+                if text_payload:
+                    return self._decode_with_fallback(text_payload)
+                return ""
+
             for part in email_message.walk():
                 content_type = part.get_content_type()
                 content_disposition = str(part.get("Content-Disposition"))

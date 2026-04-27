@@ -17,6 +17,18 @@ class HTMLReportGenerator:
 
         safe_value = value.replace('-', '&#8209;').replace(':', '&#8202;:&thinsp;')
         return f'<span class="date-text">{safe_value}</span>'
+
+    def _format_amount(self, value):
+        """格式化金额：小数部分为0时不显示 .0"""
+        try:
+            amount = round(float(value), 1)
+        except (TypeError, ValueError):
+            return value
+
+        if amount.is_integer():
+            return str(int(amount))
+
+        return f"{amount:.1f}"
     
     def generate(self, report_data):
         """
@@ -38,7 +50,7 @@ class HTMLReportGenerator:
         
         html_parts = []
         html_parts.append(self._get_html_header())
-        html_parts.append(self._get_body_start(report.get('filter_info', {})))
+        html_parts.append(self._get_body_start(report.get('filter_info', {}), report.get('overview', {})))
         html_parts.append(self._get_overview_section(report.get('overview', {})))
         html_parts.append(self._get_yearly_section(report.get('yearly_stats', [])))
         html_parts.append(self._get_cities_section(report.get('popular_cities', {})))
@@ -58,6 +70,8 @@ class HTMLReportGenerator:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="format-detection" content="telephone=no,email=no,address=no,url=no">
+    <meta name="color-scheme" content="light only">
+    <meta name="supported-color-schemes" content="light">
     <title>12306出行统计报告</title>
     <style>
         {self._get_css()}
@@ -66,9 +80,9 @@ class HTMLReportGenerator:
 <body>
     <div class="container">"""
     
-    def _get_body_start(self, filter_info):
+    def _get_body_start(self, filter_info, overview):
         """获取页面头部"""
-        filter_html = ""
+        filter_parts = []
         if filter_info and (filter_info.get('start_year') or filter_info.get('end_year')):
             start = filter_info.get('start_year', '')
             end = filter_info.get('end_year', '')
@@ -78,13 +92,24 @@ class HTMLReportGenerator:
                 range_text = f"{start}年起"
             else:
                 range_text = f"截至{end}年"
-            filter_html = f'<p style="margin-top: 10px; font-size: 0.9em;">统计范围: {range_text}</p>'
+            filter_parts.append(f'<span class="header-meta-item">统计范围: {range_text}</span>')
+
+        date_range = overview.get('date_range', {})
+        if date_range.get('start'):
+            start = date_range['start'][:10]
+            end = date_range['end'][:10]
+            filter_parts.append(
+                f'<span class="header-meta-item">数据时间: <span class="header-date">{self._format_safe_date(start)} 至 {self._format_safe_date(end)}</span></span>'
+            )
+
+        filter_html = ""
+        if filter_parts:
+            filter_html = f'<div class="header-meta">{"".join(filter_parts)}</div>'
         
         return f"""
         <div class="header">
-            <div class="header-badge">铁路出行统计</div>
             <h1>12306 出行统计报告</h1>
-            <p>按邮件记录整理的购票、退票与出行画像</p>
+            <p>按邮件记录整理的购票与出行画像</p>
             {filter_html}
         </div>
         <div class="content">"""
@@ -95,75 +120,86 @@ class HTMLReportGenerator:
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Microsoft YaHei', Arial, sans-serif;
-            background: #eef3f8;
-            padding: 14px 10px;
+            background: #eef5ff;
+            padding: 6px;
             line-height: 1.6;
             color: #1f2937;
+            color-scheme: light only;
         }
         .container {
-            max-width: 960px;
+            max-width: 1180px;
             margin: 0 auto;
             background: white;
-            border-radius: 14px;
-            border: 1px solid #dce7f3;
-            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+            border-radius: 12px;
+            border: 1px solid #cfe0ff;
+            box-shadow: none;
             overflow: hidden;
         }
         .header {
-            background: linear-gradient(135deg, #14532d 0%, #0f766e 55%, #1d4ed8 100%);
+            background: linear-gradient(135deg, #1c64f2 0%, #2f80ed 60%, #4f9cf9 100%);
             color: #fff;
-            padding: 22px 18px 18px;
+            padding: 14px 10px 10px;
             text-align: center;
+            -webkit-text-fill-color: #ffffff;
         }
-        .header-badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.16);
-            font-size: 12px;
-            margin-bottom: 10px;
+        .header h1 { font-size: 28px; margin-bottom: 2px; letter-spacing: 0; font-weight: 700; color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+        .header p { font-size: 15px; opacity: 0.96; color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+        .header-meta {
+            margin-top: 6px;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 6px 16px;
         }
-        .header h1 { font-size: 28px; margin-bottom: 4px; letter-spacing: 0; }
-        .header p { font-size: 14px; opacity: 0.92; }
-        .content { padding: 18px; }
-        .section { margin-bottom: 20px; }
+        .header-meta-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            opacity: 0.98;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff;
+        }
+        .header-date {
+            color: #fff3a3;
+            font-weight: 600;
+            -webkit-text-fill-color: #fff3a3;
+        }
+        .content { padding: 14px 14px 12px; }
+        .section { margin-bottom: 14px; }
         .section-title {
-            font-size: 18px;
+            font-size: 20px;
             color: #0f172a;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
             border-bottom: 1px solid #dbe5f0;
+            font-weight: 700;
         }
         .overview-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 10px;
-            margin-bottom: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 8px;
+            margin-bottom: 4px;
         }
         .stat-card {
-            background: #f8fbff;
+            background: #f7faff;
             color: #0f172a;
-            padding: 14px 14px 12px;
-            border-radius: 12px;
-            border: 1px solid #dbe8f4;
+            padding: 12px 12px 10px;
+            border-radius: 10px;
+            border: 1px solid #d4e4ff;
         }
-        .stat-card h3 { font-size: 12px; color: #64748b; margin-bottom: 6px; font-weight: 600; }
-        .stat-card .value { font-size: 24px; font-weight: 700; color: #0f766e; }
-        .overview-note {
-            text-align: center;
-            color: #64748b;
-            margin-top: 8px;
-            font-size: 13px;
-        }
+        .stat-card h3 { font-size: 13px; color: #4b5b76; margin-bottom: 6px; font-weight: 700; }
+        .stat-card .value { font-size: 25px; font-weight: 500; color: #334155 !important; -webkit-text-fill-color: #334155; }
         .date-text {
-            color: #475569 !important;
+            color: inherit !important;
             text-decoration: none !important;
             white-space: nowrap;
             pointer-events: none;
         }
         .table-card {
-            border: 1px solid #dbe5f0;
-            border-radius: 12px;
+            border: 1px solid #d8e5fb;
+            border-radius: 10px;
             overflow: hidden;
             background: #fff;
         }
@@ -172,49 +208,78 @@ class HTMLReportGenerator:
             border-collapse: collapse;
             margin-top: 0;
             background: white;
-            font-size: 13px;
-            table-layout: auto;
+            font-size: 15px;
+            table-layout: fixed;
         }
         thead {
-            background: #e8f1fb;
+            background: #eaf2ff;
             color: #0f172a;
         }
-        th { padding: 10px 12px; text-align: left; font-weight: 600; word-break: keep-all; }
-        td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; word-break: break-word; }
+        th { padding: 10px 8px; text-align: center; font-weight: 700; word-break: keep-all; font-size: 15px; }
+        td { padding: 9px 8px; border-bottom: 1px solid #eef2f7; word-break: break-word; text-align: center; }
+        .compact-table th, .compact-table td { white-space: nowrap; }
+        .label-cell { text-align: center; }
         tbody tr:nth-child(even) { background-color: #fbfdff; }
         tbody tr:last-child td { border-bottom: none; }
         .highlight {
-            color: #0f766e;
-            font-weight: 700;
+            color: #d14343 !important;
+            -webkit-text-fill-color: #d14343;
+            font-weight: 500;
         }
         .footer {
             text-align: center;
-            padding: 16px 14px 18px;
+            padding: 14px 12px 16px;
             color: #64748b;
-            border-top: 1px solid #e5edf5;
-            font-size: 12px;
-            background: #f8fbff;
+            border-top: 1px solid #e2ebfb;
+            font-size: 13px;
+            background: #f7faff;
         }
         h3.subsection-title {
-            margin: 16px 0 8px;
+            margin: 12px 0 7px;
             color: #334155;
-            font-size: 14px;
+            font-size: 16px;
+            font-weight: 700;
         }
         a[x-apple-data-detectors], .date-text a {
             color: inherit !important;
             text-decoration: none !important;
             pointer-events: none !important;
         }
+        [data-ogsc] .header,
+        [data-ogsc] .header h1,
+        [data-ogsc] .header p,
+        [data-ogsc] .header-meta-item,
+        [data-ogsc] .header-date {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        [data-ogsc] .header-date {
+            color: #fff3a3 !important;
+            -webkit-text-fill-color: #fff3a3 !important;
+        }
+        [data-ogsc] .highlight {
+            color: #d14343 !important;
+            -webkit-text-fill-color: #d14343 !important;
+        }
+        [data-ogsc] .stat-card .value {
+            color: #334155 !important;
+            -webkit-text-fill-color: #334155 !important;
+        }
+        @media (min-width: 1024px) {
+            .content { padding: 18px 20px 16px; }
+        }
         @media (max-width: 768px) {
-            body { padding: 8px; }
+            body { padding: 0; }
             .container { border-radius: 10px; }
-            .header { padding: 18px 14px 16px; }
+            .header { padding: 14px 8px 10px; }
             .header h1 { font-size: 22px; }
-            .content { padding: 14px; }
+            .header p { font-size: 14px; }
+            .header-meta { gap: 4px 10px; }
+            .content { padding: 8px 6px 8px; }
             .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .stat-card .value { font-size: 20px; }
-            table { font-size: 12px; }
-            th, td { padding: 8px 9px; }
+            .stat-card .value { font-size: 21px; }
+            table { font-size: 14px; }
+            th, td { padding: 8px 8px; font-size: 14px; }
         }
         """
     
@@ -222,12 +287,6 @@ class HTMLReportGenerator:
         """生成概览部分HTML"""
         if not overview:
             return ""
-        
-        date_range_html = ""
-        if overview.get('date_range', {}).get('start'):
-            start = overview['date_range']['start'][:10]
-            end = overview['date_range']['end'][:10]
-            date_range_html = f'<p class="overview-note">数据时间范围: {self._format_safe_date(start)} 至 {self._format_safe_date(end)}</p>'
         
         return f"""
             <div class="section">
@@ -238,8 +297,8 @@ class HTMLReportGenerator:
                         <div class="value">{overview.get('total_records', 0)}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>有效出行次数</h3>
-                        <div class="value">{overview.get('purchase_count', 0)}</div>
+                        <h3>购票次数</h3>
+                        <div class="value">{overview.get('ticket_purchase_count', overview.get('purchase_count', 0))}</div>
                     </div>
                     <div class="stat-card">
                         <h3>退票次数</h3>
@@ -250,19 +309,14 @@ class HTMLReportGenerator:
                         <div class="value">{overview.get('change_count', 0)}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>购票记录数</h3>
-                        <div class="value">{overview.get('ticket_purchase_count', 0)}</div>
-                    </div>
-                    <div class="stat-card">
                         <h3>总消费金额</h3>
-                        <div class="value">¥{overview.get('total_spent', 0):.1f}</div>
+                        <div class="value">¥{self._format_amount(overview.get('total_spent', 0))}</div>
                     </div>
                     <div class="stat-card">
                         <h3>净消费金额</h3>
-                        <div class="value">¥{overview.get('net_spent', 0):.1f}</div>
+                        <div class="value">¥{self._format_amount(overview.get('net_spent', 0))}</div>
                     </div>
                 </div>
-                {date_range_html}
             </div>
         """
     
@@ -276,16 +330,13 @@ class HTMLReportGenerator:
         
         rows = []
         for stat in yearly_stats_sorted:
-            year_start = f"{stat['year']}-01-01"
-            year_end = f"{stat['year']}-12-31"
             rows.append(f"""
                 <tr>
-                    <td style="width: 45px;"><strong>{stat['year']}</strong></td>
-                    <td style="width: 55px;">{stat['total_trips']}</td>
-                    <td>¥{stat['total_spent']:.1f}</td>
-                    <td>¥{stat['total_refunded']:.1f}</td>
-                    <td class="highlight">¥{stat['net_spent']:.1f}</td>
-                    <td>¥{stat['avg_price']:.1f}</td>
+                    <td style="width: 56px;">{stat['year']}</td>
+                    <td style="width: 90px;">{stat['total_trips']}</td>
+                    <td>¥{self._format_amount(stat['total_spent'])}</td>
+                    <td>¥{self._format_amount(stat['total_refunded'])}</td>
+                    <td class="highlight">¥{self._format_amount(stat['net_spent'])}</td>
                 </tr>
             """)
         
@@ -294,15 +345,14 @@ class HTMLReportGenerator:
         return f"""
             <div class="section">
                 <h2 class="section-title">年度统计</h2>
-                <div class="table-card"><table>
+                <div class="table-card"><table class="compact-table">
                     <thead>
                         <tr>
-                            <th style="width: 45px;">年份</th>
-                            <th style="width: 55px;">出行次数</th>
-                            <th>消费金额</th>
-                            <th>退款金额</th>
-                            <th>净消费</th>
-                            <th>平均票价</th>
+                            <th style="width: 56px;">年份</th>
+                            <th style="width: 90px;">购票</th>
+                            <th style="width: 28%;">消费金额</th>
+                            <th style="width: 28%;">退款金额</th>
+                            <th style="width: 28%;">净消费</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -317,16 +367,16 @@ class HTMLReportGenerator:
         if not popular_cities:
             return ""
         
-        html_parts = ['<div class="section"><h2 class="section-title">热门城市与路线</h2>']
+        html_parts = ['<div class="section"><h2 class="section-title">城市路线</h2>']
         
         # 出发城市
         if popular_cities.get('departures'):
             rows = []
             for idx, city in enumerate(popular_cities['departures'][:10], 1):
-                rows.append(f"<tr><td>{idx}</td><td><strong>{city['city']}</strong></td><td>{city['count']}</td></tr>")
+                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell\">{city['city']}</td><td>{city['count']}</td></tr>")
             
             html_parts.append(f"""
-                <h3 class="subsection-title">热门出发城市 TOP 10</h3>
+                <h3 class="subsection-title">出发城市</h3>
                 <div class="table-card"><table>
                     <thead><tr><th>排名</th><th>城市</th><th>出发次数</th></tr></thead>
                     <tbody>{''.join(rows)}</tbody>
@@ -337,10 +387,10 @@ class HTMLReportGenerator:
         if popular_cities.get('arrivals'):
             rows = []
             for idx, city in enumerate(popular_cities['arrivals'][:10], 1):
-                rows.append(f"<tr><td>{idx}</td><td><strong>{city['city']}</strong></td><td>{city['count']}</td></tr>")
+                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell\">{city['city']}</td><td>{city['count']}</td></tr>")
             
             html_parts.append(f"""
-                <h3 class="subsection-title">热门到达城市 TOP 10</h3>
+                <h3 class="subsection-title">到达城市</h3>
                 <div class="table-card"><table>
                     <thead><tr><th>排名</th><th>城市</th><th>到达次数</th></tr></thead>
                     <tbody>{''.join(rows)}</tbody>
@@ -351,12 +401,12 @@ class HTMLReportGenerator:
         if popular_cities.get('routes'):
             rows = []
             for idx, route in enumerate(popular_cities['routes'][:10], 1):
-                rows.append(f"<tr><td>{idx}</td><td><strong>{route['route']}</strong></td><td>{route['count']}</td></tr>")
+                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell\">{route['route']}</td><td>{route['count']}</td></tr>")
             
             html_parts.append(f"""
-                <h3 class="subsection-title">热门路线 TOP 10</h3>
+                <h3 class="subsection-title">热门路线</h3>
                 <div class="table-card"><table style="width: 100%;">
-                    <thead><tr><th style="width: 40px;">排名</th><th style="width: auto;">路线</th><th style="width: 50px;">次数</th></tr></thead>
+                    <thead><tr><th style="width: 52px;">排名</th><th style="width: 74%;">路线</th><th style="width: 64px;">次数</th></tr></thead>
                     <tbody>{''.join(rows)}</tbody>
                 </table></div>
             """)
@@ -374,9 +424,9 @@ class HTMLReportGenerator:
             rows.append(f"""
                 <tr>
                     <td>{idx}</td>
-                    <td><strong>{train['train_number']}</strong></td>
+                    <td class="label-cell">{train['train_number']}</td>
                     <td>{train['count']}</td>
-                    <td>¥{train['avg_price']:.1f}</td>
+                    <td>¥{self._format_amount(train['avg_price'])}</td>
                 </tr>
             """)
         
@@ -384,7 +434,7 @@ class HTMLReportGenerator:
         
         return f"""
             <div class="section">
-                <h2 class="section-title">常坐列车 TOP 15</h2>
+                <h2 class="section-title">常坐列车</h2>
                 <div class="table-card"><table>
                     <thead>
                         <tr><th>排名</th><th>车次</th><th>乘坐次数</th><th>平均票价</th></tr>
@@ -403,10 +453,10 @@ class HTMLReportGenerator:
         for seat in seat_type_stats:
             rows.append(f"""
                 <tr>
-                    <td><strong>{seat['seat_type']}</strong></td>
+                    <td class="label-cell">{seat['seat_type']}</td>
                     <td>{seat['count']}</td>
-                    <td>¥{seat['avg_price']:.1f}</td>
-                    <td class="highlight">¥{seat['total_spent']:.1f}</td>
+                    <td>¥{self._format_amount(seat['avg_price'])}</td>
+                    <td class="highlight">¥{self._format_amount(seat['total_spent'])}</td>
                 </tr>
             """)
         
@@ -414,7 +464,7 @@ class HTMLReportGenerator:
         
         return f"""
             <div class="section">
-                <h2 class="section-title">座位类型偏好</h2>
+                <h2 class="section-title">座位偏好</h2>
                 <div class="table-card"><table>
                     <thead>
                         <tr><th>座位类型</th><th>选择次数</th><th>平均票价</th><th>总消费</th></tr>
@@ -433,9 +483,9 @@ class HTMLReportGenerator:
         for passenger in passenger_stats:
             rows.append(f"""
                 <tr>
-                    <td><strong>{passenger['passenger_name']}</strong></td>
+                    <td class="label-cell">{passenger['passenger_name']}</td>
                     <td>{passenger['trip_count']}</td>
-                    <td class="highlight">¥{passenger['total_spent']:.1f}</td>
+                    <td class="highlight">¥{self._format_amount(passenger['total_spent'])}</td>
                 </tr>
             """)
         
@@ -459,5 +509,4 @@ class HTMLReportGenerator:
         </div>
         <div class="footer">
             <p>报告生成时间: {self._format_safe_date(generate_time)}</p>
-            <p style="margin-top: 5px;">© 2026 12306出行统计分析系统</p>
         </div>"""
