@@ -1,0 +1,22 @@
+{
+  "email": {
+    "sender_email": "781408677@qq.com",
+    "sender_password": "geueylbholbebdha",
+    "recipient_email": [
+      "781408677@qq.com"
+    ]
+  },
+  "imap_server": "imap.qq.com",
+  "imap_port": 993,
+  "smtp_server": "smtp.qq.com",
+  "smtp_port": 465,
+  "default_combined": true,
+  "analysis": {
+    "mailbox_name": "INBOX.12306",
+    "max_emails": 10000,
+    "start_year": null,
+    "end_year": null,
+    "start_month": null,
+    "end_month": null
+  }
+}
