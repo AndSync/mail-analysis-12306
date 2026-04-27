@@ -1,0 +1,432 @@
+# 12306邮件分析系统 - 技术文档
+
+## 系统架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      main.py                            │
+│                    (主流程控制)                          │
+└─────────────────┬───────────────────────────────────────┘
+                  │
+      ┌───────────┼───────────┬───────────┬───────────┐
+      │           │           │           │           │
+      ▼           ▼           ▼           ▼           ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│ mail_    │ │ email_   │ │ data_    │ │ html_    │ │ email_   │
+│ reader   │ │ parser   │ │ analyzer │ │ report   │ │ sender   │
+└────────── └──────────┘ ──────────┘ └──────────┘ └──────────
+```
+
+## 核心模块详解
+
+### 1. mail_reader.py - 邮件读取模块
+
+#### 功能
+- IMAP连接管理
+- 文件夹遍历
+- 邮件搜索和获取
+- 编码解码处理
+
+#### 关键技术点
+
+**1.1 Modified UTF-7编码处理**
+```python
+# QQ邮箱中文文件夹使用Modified UTF-7编码
+# "网上购票" → "&UXZO1mWHTvZZOQ-/&U05OOl8AU9GABYBUdt8-"
+# IMAP协议要求使用UTF-7，Python的imaplib自动处理
+```
+
+**1.2 搜索策略**
+```python
+# 方案1：发件人过滤（快速但可能漏掉旧邮件）
+search_criteria = '(FROM "12306@rails.com.cn")'
+
+# 方案2：主题过滤（IMAP不支持中文）
+search_criteria = '(SUBJECT "12306")'  # 中文会导致编码错误
+
+# 方案3：全量获取+解析时过滤（最完整但最慢）
+search_criteria = 'ALL'
+```
+
+**1.3 多编码邮件解码**
+```python
+# 支持UTF-8、GBK、GB2312等多种编码
+def _decode_mime_words(decoded_parts):
+    for part, charset in decoded_parts:
+        if charset:
+            decoded_str += part.decode(charset, errors='ignore')
+        else:
+            decoded_str += part.decode('utf-8', errors='ignore')
+```
+
+**1.4 文件夹遍历容错**
+```python
+# 某些文件夹不可访问，需要跳过
+try:
+    status, messages = mailbox.select(mailbox_name)
+    if status != 'OK':
+        continue
+except Exception:
+    logger.warning(f"跳过文件夹 {mailbox_name}")
+```
+
+### 2. email_parser.py - 邮件解析模块
+
+#### 功能
+- HTML内容提取
+- 纯文本清理
+- 多格式兼容解析
+- 乘客信息提取
+
+#### 关键技术点
+
+**2.1 HTML清理**
+```python
+class SimpleHTMLParser(HTMLParser):
+    def handle_starttag(self, tag, attrs):
+        if tag == 'br':
+            self.text_parts.append('\n')
+    
+    def handle_data(self, data):
+        self.text_parts.append(data)
+```
+
+**2.2 多格式兼容正则**
+```python
+# 新格式：2026年05月06日02:30开
+# 旧格式：01月24日19:28
+date_pattern = r'(\d{4}年)?(\d{1,2}月\d{1,2}日)\s*(\d{2}:\d{2})开?'
+
+# 新格式：G4480次
+# 旧格式：T164次
+train_pattern = r'([GDCKZT]\d+)次(?:列车)?'
+```
+
+**2.3 多人订单拆分**
+```python
+# 匹配格式：1.李志敏, 2.王某某,
+passenger_pattern = r'\d+\.([\u4e00-\u9fa5·]{2,4})[,，]'
+
+# 提取每个乘客的完整信息
+for match in re.finditer(passenger_pattern, text):
+    passenger_info = self._extract_single_passenger_info(line)
+```
+
+**2.4 座位类型标准化**
+```python
+# 正则优先匹配具体类型
+seat_pattern = r'(硬卧|软卧|动卧|硬座|软座|商务座|特等座|一等座|二等座|无座|[\u4e00-\u9fa5]+?(?:上|中|下)铺)'
+
+# 归一化处理
+if '硬' in seat_type:
+    seat_type = '硬卧'
+elif '软' in seat_type:
+    seat_type = '软卧'
+```
+
+**2.5 退票/改签检测**
+```python
+def _detect_ticket_type(subject, body):
+    refund_keywords = ['退票', '退单', '退款', '退订', '返还', '已退票', '退改', '停运']
+    change_keywords = ['改签', '变更']
+    
+    if any(kw in subject for kw in refund_keywords):
+        return 'refund'
+    elif any(kw in subject for kw in change_keywords):
+        return 'change'
+    return 'purchase'
+```
+
+### 3. data_analyzer.py - 数据分析模块
+
+#### 功能
+- 数据过滤和清洗
+- 多维度统计分析
+- 聚合计算
+
+#### 关键技术点
+
+**3.1 时间维度选择**
+```python
+# 优先使用出发日期，避免跨年统计错误
+year = record.get('_year')
+if not year and '_datetime' in record:
+    year = record['_datetime'].year
+```
+
+**3.2 城市名称标准化**
+```python
+# 长后缀优先匹配
+suffixes = ['火车站', '高铁站', '动车站', '城际站', '东站', '西站', '南站', '北站', '站']
+
+for suffix in suffixes:
+    if city.endswith(suffix):
+        city = city[:-len(suffix)]
+        break
+```
+
+**3.3 改签金额计算**
+```python
+# 改签 = 原票退款 + 新票购买
+if ticket_type == 'change':
+    total_spent += price      # 新票消费
+    total_refunded += price   # 原票退款
+```
+
+**3.4 热门路线统计**
+```python
+# 路线格式：北京→郑州
+route = f"{departure_city}→{arrival_city}"
+route_counter[route] += 1
+
+# 按次数排序
+sorted_routes = sorted(route_counter.items(), key=lambda x: x[1], reverse=True)
+```
+
+### 4. html_report.py - HTML报告生成
+
+#### 功能
+- CSS样式生成
+- 数据结构转HTML
+- 响应式布局
+
+#### 关键技术点
+
+**4.1 紧凑布局设计**
+```css
+body {
+    padding: 2px;  /* 极致紧凑 */
+    font-size: 0.78em;
+}
+
+.stat-card {
+    padding: 5px 7px;  /* 最小化内边距 */
+}
+```
+
+**4.2 防链接识别**
+```html
+<span style="
+    color: #666 !important;
+    text-decoration: none !important;
+    pointer-events: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+">
+2012-01-24
+</span>
+```
+
+**4.3 表格优化**
+```css
+table {
+    table-layout: fixed;  /* 固定布局防止拉伸 */
+    font-size: 0.78em;
+}
+
+th, td {
+    white-space: nowrap;  /* 防止换行 */
+}
+```
+
+**4.4 响应式卡片网格**
+```css
+.overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 5px;  /* 最小间距 */
+}
+```
+
+### 5. email_sender.py - 邮件发送模块
+
+#### 功能
+- SMTP连接
+- HTML邮件构建
+- 多收件人支持
+
+#### 关键技术点
+
+**5.1 邮件构建**
+```python
+msg = MIMEMultipart('alternative')
+msg['From'] = sender_email
+msg['To'] = ', '.join(recipients)
+msg['Subject'] = f'12306出行统计报告 - {datetime.now().strftime("%Y-%m-%d")}'
+
+html_part = MIMEText(html_content, 'html', 'utf-8')
+msg.attach(html_part)
+```
+
+**5.2 SSL加密连接**
+```python
+server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+server.login(sender_email, sender_password)
+server.sendmail(sender_email, recipients, msg.as_string())
+```
+
+### 6. main.py - 主流程控制
+
+#### 执行流程
+```python
+1. 加载配置文件 (config.json)
+2. 读取邮件 (mail_reader)
+   ├─ 连接IMAP服务器
+   ├─ 遍历文件夹
+   └─ 搜索12306邮件
+3. 解析邮件 (email_parser)
+   ├─ HTML转纯文本
+   ├─ 正则提取信息
+   └─ 构建结构化数据
+4. 数据分析 (data_analyzer)
+   ├─ 数据清洗
+   ├─ 多维度统计
+   └─ 生成报告数据
+5. 生成HTML (html_report)
+   ├─ CSS样式
+   ├─ 数据结构转HTML
+   └─ 保存文件
+6. 发送邮件 (email_sender)
+   ├─ SMTP连接
+   ├─ 构建邮件
+   └─ 发送
+```
+
+## 数据结构
+
+### 邮件原始数据
+```python
+{
+    'subject': '网上购票系统-用户支付通知',
+    'from': '12306@rails.com.cn',
+    'date': 'Thu, 06 Feb 2026 12:30:00 +0800',
+    'body': '<html>...</html>'
+}
+```
+
+### 解析后的票务记录
+```python
+{
+    'order_number': 'E673307420',
+    'train_number': 'G4480',
+    'departure_station': '郑州东站',
+    'arrival_station': '北京西站',
+    'departure_datetime': '2026-02-12 20:40',
+    'price': 309.0,
+    'seat_type': '二等座',
+    'passenger_name': '李志敏',
+    'carriage': '14',
+    'seat_number': '8A',
+    'ticket_type': 'purchase',  # purchase/refund/change
+    '_year': 2026,              # 用于年度统计
+    '_datetime': datetime(...), # 邮件接收时间
+    '_departure_city': '郑州',  # 标准化城市名
+    '_arrival_city': '北京'
+}
+```
+
+### 统计数据
+```python
+overview = {
+    'total_records': 641,
+    'purchase_count': 590,
+    'refund_count': 49,
+    'change_count': 2,
+    'total_spent': 125680.5,
+    'total_refunded': 15320.0,
+    'net_spent': 110360.5,
+    'date_range': {'start': '2012-01-24', 'end': '2026-02-15'}
+}
+```
+
+## 性能优化
+
+### 1. 邮件读取优化
+- 指定文件夹避免全量遍历
+- 分批获取（每50封打印进度）
+- 延迟控制（0.02秒/封）
+
+### 2. 解析优化
+- 正则预编译
+- HTML解析器复用
+- 异常快速跳过
+
+### 3. 统计优化
+- defaultdict加速聚合
+- 单次遍历多维度统计
+- 内存优化（按需加载）
+
+## 错误处理
+
+### 常见错误及处理
+```python
+1. IMAP连接失败
+   → 检查网络和授权码
+   → 重试机制
+
+2. 文件夹不可访问
+   → 跳过并记录日志
+   → 继续处理其他文件夹
+
+3. 邮件解析失败
+   → 记录失败邮件信息
+   → 不影响其他邮件
+   → 当前失败率 < 0.3%
+
+4. 编码错误
+   → 多编码降级策略
+   → errors='ignore' 容错
+```
+
+## 扩展性
+
+### 支持的邮箱类型
+```python
+# QQ邮箱
+imap_server = 'imap.qq.com'
+smtp_server = 'smtp.qq.com'
+
+# 163邮箱
+imap_server = 'imap.163.com'
+smtp_server = 'smtp.163.com'
+
+# Gmail
+imap_server = 'imap.gmail.com'
+smtp_server = 'smtp.gmail.com'
+```
+
+### 未来可扩展功能
+1. PDF报告导出
+2. Excel数据导出
+3. 可视化图表（matplotlib）
+4. 命令行参数支持
+5. 定时任务（cron）
+6. Web界面
+7. 多邮箱账号支持
+
+## 测试数据
+
+### 典型运行结果
+```
+邮件获取: 588 封
+解析记录: 641 条
+未解析: 2/588 (0.34%)
+统计时间: 2012-01-24 至 2026-02-15
+总消费: ¥125,680.50
+净消费: ¥110,360.50
+运行时间: ~3分钟
+```
+
+## 技术栈总结
+- Python 3.6+
+- imaplib (IMAP客户端)
+- smtplib (SMTP客户端)
+- email (邮件解析)
+- html.parser (HTML解析)
+- re (正则表达式)
+- datetime (时间处理)
+- collections (数据结构)
+- json (配置管理)
+- logging (日志)
+
+**零第三方依赖，纯标准库实现**

@@ -86,85 +86,88 @@ class HTMLReportGenerator:
         body {
             font-family: 'Microsoft YaHei', Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
-            line-height: 1.6;
+            padding: 2px;
+            line-height: 1.5;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            border-radius: 2px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.06);
             overflow: hidden;
         }
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 40px;
+            padding: 5px 8px;
             text-align: center;
         }
-        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
-        .header p { font-size: 1.1em; opacity: 0.9; }
-        .content { padding: 40px; }
-        .section { margin-bottom: 40px; }
+        .header h1 { font-size: 1.1em; margin-bottom: 2px; }
+        .header p { font-size: 0.7em; opacity: 0.9; }
+        .content { padding: 5px 8px; }
+        .section { margin-bottom: 8px; }
         .section-title {
-            font-size: 1.8em;
+            font-size: 0.95em;
             color: #667eea;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 3px solid #667eea;
+            margin-bottom: 4px;
+            padding-bottom: 2px;
+            border-bottom: 2px solid #667eea;
         }
         .overview-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 4px;
+            margin-bottom: 6px;
         }
         .stat-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            padding: 5px 7px;
+            border-radius: 2px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
             transition: transform 0.3s;
         }
-        .stat-card:hover { transform: translateY(-5px); }
-        .stat-card h3 { font-size: 0.9em; opacity: 0.9; margin-bottom: 10px; }
-        .stat-card .value { font-size: 2em; font-weight: bold; }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-card h3 { font-size: 0.6em; opacity: 0.9; margin-bottom: 2px; }
+        .stat-card .value { font-size: 1.1em; font-weight: bold; }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 4px;
             background: white;
-            border-radius: 10px;
+            border-radius: 2px;
             overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            font-size: 0.78em;
+            table-layout: fixed;
         }
         thead {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
-        th { padding: 15px; text-align: left; font-weight: 600; }
-        td { padding: 12px 15px; border-bottom: 1px solid #eee; }
+        th { padding: 3px 4px; text-align: left; font-weight: 600; font-size: 0.85em; word-wrap: break-word; white-space: nowrap; }
+        td { padding: 3px 4px; border-bottom: 1px solid #eee; word-wrap: break-word; white-space: nowrap; }
         tbody tr:hover { background-color: #f8f9ff; }
         tbody tr:last-child td { border-bottom: none; }
         .highlight {
             background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
-            padding: 2px 8px;
-            border-radius: 5px;
+            padding: 2px 6px;
+            border-radius: 3px;
             font-weight: bold;
         }
         .footer {
             text-align: center;
-            padding: 20px;
+            padding: 10px;
             color: #666;
             border-top: 1px solid #eee;
-            font-size: 0.9em;
+            font-size: 0.8em;
         }
         @media (max-width: 768px) {
-            .header h1 { font-size: 1.8em; }
-            .content { padding: 20px; }
-            table { font-size: 0.9em; }
+            .header h1 { font-size: 1.3em; }
+            .content { padding: 10px 15px; }
+            table { font-size: 0.8em; }
+            .overview-grid { grid-template-columns: repeat(2, 1fr); }
         }
         """
     
@@ -177,7 +180,8 @@ class HTMLReportGenerator:
         if overview.get('date_range', {}).get('start'):
             start = overview['date_range']['start'][:10]
             end = overview['date_range']['end'][:10]
-            date_range_html = f'<p style="text-align: center; color: #666; margin-top: 15px;">数据统计时间范围: {start} 至 {end}</p>'
+            # 使用 <span> 包裹日期，防止手机自动识别为链接
+            date_range_html = f'<p style="text-align: center; color: #666; margin-top: 5px; font-size: 0.75em;">数据统计时间范围: <span style="color: #666 !important; text-decoration: none !important; border-bottom: none !important; pointer-events: none; cursor: default; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;">{start}</span> 至 <span style="color: #666 !important; text-decoration: none !important; border-bottom: none !important; pointer-events: none; cursor: default; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;">{end}</span></p>'
         
         return f"""
             <div class="section">
@@ -201,11 +205,11 @@ class HTMLReportGenerator:
                     </div>
                     <div class="stat-card">
                         <h3>总消费金额</h3>
-                        <div class="value">¥{overview.get('total_spent', 0):.2f}</div>
+                        <div class="value">¥{overview.get('total_spent', 0):.1f}</div>
                     </div>
                     <div class="stat-card">
                         <h3>净消费金额</h3>
-                        <div class="value">¥{overview.get('net_spent', 0):.2f}</div>
+                        <div class="value">¥{overview.get('net_spent', 0):.1f}</div>
                     </div>
                 </div>
                 {date_range_html}
@@ -217,17 +221,21 @@ class HTMLReportGenerator:
         if not yearly_stats:
             return ""
         
+        # 按年份倒序排列（最新的在前）
+        yearly_stats_sorted = sorted(yearly_stats, key=lambda x: x['year'], reverse=True)
+        
         rows = []
-        for stat in yearly_stats:
+        for stat in yearly_stats_sorted:
+            year_start = f"{stat['year']}-01-01"
+            year_end = f"{stat['year']}-12-31"
             rows.append(f"""
                 <tr>
-                    <td><strong>{stat['year']}</strong></td>
-                    <td>{stat['total_trips']}</td>
-                    <td>{stat['refund_count']}</td>
-                    <td>¥{stat['total_spent']:.2f}</td>
-                    <td>¥{stat['total_refunded']:.2f}</td>
-                    <td class="highlight">¥{stat['net_spent']:.2f}</td>
-                    <td>¥{stat['avg_price']:.2f}</td>
+                    <td style="width: 45px;"><strong>{stat['year']}</strong></td>
+                    <td style="width: 55px;">{stat['total_trips']}</td>
+                    <td>¥{stat['total_spent']:.1f}</td>
+                    <td>¥{stat['total_refunded']:.1f}</td>
+                    <td class="highlight">¥{stat['net_spent']:.1f}</td>
+                    <td>¥{stat['avg_price']:.1f}</td>
                 </tr>
             """)
         
@@ -239,9 +247,8 @@ class HTMLReportGenerator:
                 <table>
                     <thead>
                         <tr>
-                            <th>年份</th>
-                            <th>出行次数</th>
-                            <th>退票次数</th>
+                            <th style="width: 45px;">年份</th>
+                            <th style="width: 55px;">出行次数</th>
                             <th>消费金额</th>
                             <th>退款金额</th>
                             <th>净消费</th>
@@ -269,7 +276,7 @@ class HTMLReportGenerator:
                 rows.append(f"<tr><td>{idx}</td><td><strong>{city['city']}</strong></td><td>{city['count']}</td></tr>")
             
             html_parts.append(f"""
-                <h3 style="margin: 20px 0 10px 0; color: #667eea;">热门出发城市 TOP 10</h3>
+                <h3 style="margin: 12px 0 8px 0; color: #667eea;">热门出发城市 TOP 10</h3>
                 <table>
                     <thead><tr><th>排名</th><th>城市</th><th>出发次数</th></tr></thead>
                     <tbody>{''.join(rows)}</tbody>
@@ -283,7 +290,7 @@ class HTMLReportGenerator:
                 rows.append(f"<tr><td>{idx}</td><td><strong>{city['city']}</strong></td><td>{city['count']}</td></tr>")
             
             html_parts.append(f"""
-                <h3 style="margin: 20px 0 10px 0; color: #667eea;">热门到达城市 TOP 10</h3>
+                <h3 style="margin: 12px 0 8px 0; color: #667eea;">热门到达城市 TOP 10</h3>
                 <table>
                     <thead><tr><th>排名</th><th>城市</th><th>到达次数</th></tr></thead>
                     <tbody>{''.join(rows)}</tbody>
@@ -297,9 +304,9 @@ class HTMLReportGenerator:
                 rows.append(f"<tr><td>{idx}</td><td><strong>{route['route']}</strong></td><td>{route['count']}</td></tr>")
             
             html_parts.append(f"""
-                <h3 style="margin: 20px 0 10px 0; color: #667eea;">热门路线 TOP 10</h3>
-                <table>
-                    <thead><tr><th>排名</th><th>路线</th><th>次数</th></tr></thead>
+                <h3 style="margin: 8px 0 5px 0; color: #667eea;">热门路线 TOP 10</h3>
+                <table style="table-layout: fixed; width: 100%;">
+                    <thead><tr><th style="width: 40px;">排名</th><th style="width: auto;">路线</th><th style="width: 50px;">次数</th></tr></thead>
                     <tbody>{''.join(rows)}</tbody>
                 </table>
             """)
@@ -319,7 +326,7 @@ class HTMLReportGenerator:
                     <td>{idx}</td>
                     <td><strong>{train['train_number']}</strong></td>
                     <td>{train['count']}</td>
-                    <td>¥{train['avg_price']:.2f}</td>
+                    <td>¥{train['avg_price']:.1f}</td>
                 </tr>
             """)
         
@@ -348,8 +355,8 @@ class HTMLReportGenerator:
                 <tr>
                     <td><strong>{seat['seat_type']}</strong></td>
                     <td>{seat['count']}</td>
-                    <td>¥{seat['avg_price']:.2f}</td>
-                    <td class="highlight">¥{seat['total_spent']:.2f}</td>
+                    <td>¥{seat['avg_price']:.1f}</td>
+                    <td class="highlight">¥{seat['total_spent']:.1f}</td>
                 </tr>
             """)
         
@@ -378,7 +385,7 @@ class HTMLReportGenerator:
                 <tr>
                     <td><strong>{passenger['passenger_name']}</strong></td>
                     <td>{passenger['trip_count']}</td>
-                    <td class="highlight">¥{passenger['total_spent']:.2f}</td>
+                    <td class="highlight">¥{passenger['total_spent']:.1f}</td>
                 </tr>
             """)
         

@@ -26,24 +26,29 @@ class DataAnalyzer:
             return
         
         for record in self.records:
-            if 'date' in record and record['date']:
-                try:
-                    # 解析日期字符串
-                    date_str = record['date']
-                    if isinstance(date_str, str):
-                        # 尝试多种日期格式
-                        for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%a, %d %b %Y %H:%M:%S %z"]:
-                            try:
-                                dt = datetime.strptime(date_str[:19], fmt[:19])
-                                record['_datetime'] = dt
-                                record['_year'] = dt.year
-                                record['_month'] = dt.month
-                                record['_year_month'] = f"{dt.year}-{dt.month:02d}"
-                                break
-                            except:
-                                continue
-                except Exception as e:
-                    logger.debug(f"日期解析失败: {e}")
+            try:
+                # 优先使用出发日期（departure_datetime），如果没有则使用邮件接收日期（date）
+                date_str = record.get('departure_datetime') or record.get('date')
+                
+                if date_str and isinstance(date_str, str):
+                    # 尝试多种日期格式
+                    parsed = False
+                    for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%a, %d %b %Y %H:%M:%S %z"]:
+                        try:
+                            dt = datetime.strptime(date_str[:19], fmt[:19])
+                            record['_datetime'] = dt
+                            record['_year'] = dt.year
+                            record['_month'] = dt.month
+                            record['_year_month'] = f"{dt.year}-{dt.month:02d}"
+                            parsed = True
+                            break
+                        except:
+                            continue
+                    
+                    if not parsed:
+                        logger.debug(f"无法解析日期: {date_str}")
+            except Exception as e:
+                logger.debug(f"日期解析失败: {e}")
         
         logger.info(f"已准备 {len(self.records)} 条记录用于分析")
     
@@ -111,8 +116,16 @@ class DataAnalyzer:
         refund_records = [r for r in records if r.get('type') == 'refund']
         change_records = [r for r in records if r.get('type') == 'change']
         
+        # 购票金额
         total_spent = sum(r.get('price', 0) for r in purchase_records if 'price' in r)
+        
+        # 退票金额
         total_refunded = sum(r.get('price', 0) for r in refund_records if 'price' in r)
+        
+        # 改签金额：改签视为原票退款+新票购买，所以计入消费和退款
+        change_spent = sum(r.get('price', 0) for r in change_records if 'price' in r)
+        total_spent += change_spent
+        total_refunded += change_spent
         
         # 获取日期范围
         dates = [r['_datetime'] for r in records if '_datetime' in r]
@@ -145,11 +158,15 @@ class DataAnalyzer:
         if not records:
             return []
         
-        # 按年份分组
+        # 按年份分组（使用出发日期的年份，如果没有则用邮件接收日期）
         yearly_data = defaultdict(list)
         for record in records:
-            if '_year' in record:
-                yearly_data[record['_year']].append(record)
+            # 优先使用出发日期的年份
+            year = record.get('_year')
+            if not year and '_datetime' in record:
+                year = record['_datetime'].year
+            if year:
+                yearly_data[year].append(record)
         
         yearly_stats = []
         
@@ -158,9 +175,19 @@ class DataAnalyzer:
             
             purchase_records = [r for r in year_records if r.get('type') == 'purchase']
             refund_records = [r for r in year_records if r.get('type') == 'refund']
+            change_records = [r for r in year_records if r.get('type') == 'change']
             
+            # 购票金额
             total_spent = sum(r.get('price', 0) for r in purchase_records if 'price' in r)
+            
+            # 退票金额
             total_refunded = sum(r.get('price', 0) for r in refund_records if 'price' in r)
+            
+            # 改签金额：计入消费和退款
+            change_spent = sum(r.get('price', 0) for r in change_records if 'price' in r)
+            total_spent += change_spent
+            total_refunded += change_spent
+            
             avg_price = total_spent / len(purchase_records) if purchase_records else 0
             
             stat = {
@@ -409,9 +436,9 @@ class DataAnalyzer:
         if not station_name:
             return ""
         
-        # 去掉常见后缀
+        # 去掉常见后缀（按长度从长到短排序，优先匹配长的）
         city = station_name
-        suffixes = ['站', '火车站', '高铁站', '东站', '西站', '南站', '北站']
+        suffixes = ['火车站', '高铁站', '动车站', '城际站', '东站', '西站', '南站', '北站', '站']
         
         for suffix in suffixes:
             if city.endswith(suffix):

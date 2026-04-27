@@ -7,6 +7,8 @@ import logging
 import sys
 from datetime import datetime
 
+# 导入engine模块
+sys.path.insert(0, 'engine')
 from mail_reader import MailReader
 from email_parser import EmailParser
 from data_analyzer import DataAnalyzer
@@ -19,7 +21,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('analysis.log', encoding='utf-8')
+        logging.FileHandler('analysis.log', encoding='utf-8', mode='w')
     ]
 )
 
@@ -56,18 +58,24 @@ def main():
         return
     
     try:
-        # 选择邮箱文件夹（可以配置为12306文件夹）
-        mailbox_name = config.get('analysis', {}).get('mailbox_name', 'INBOX')
-        mail_count = mail_reader.select_mailbox(mailbox_name)
+        # 选择邮箱文件夹（可选配置）
+        mailbox_name = config.get('analysis', {}).get('mailbox_name', None)
         
-        if mail_count == 0:
-            logger.warning(f"邮箱文件夹 '{mailbox_name}' 中没有邮件")
-            logger.info("尝试使用 INBOX...")
-            mail_count = mail_reader.select_mailbox('INBOX')
+        # 如果配置为空字符串，也视为未指定
+        if mailbox_name == '':
+            mailbox_name = None
         
-        if mail_count == 0:
-            logger.error("邮箱中没有邮件，程序退出")
-            return
+        if mailbox_name:
+            logger.info(f"✓ 配置指定文件夹: {mailbox_name}（推荐，速度更快）")
+            mail_count = mail_reader.select_mailbox(mailbox_name)
+            
+            if mail_count == 0:
+                logger.warning(f"邮箱文件夹 '{mailbox_name}' 中没有邮件")
+                logger.info("将改为搜索收件箱...")
+                mailbox_name = None
+        else:
+            logger.info("⚠ 未指定文件夹，默认搜索收件箱（INBOX）")
+            logger.info("💡 提示：如果12306邮件在其他文件夹，请在config.json中配置mailbox_name")
         
         # 获取日期范围配置
         analysis_config = config.get('analysis', {})
@@ -98,7 +106,8 @@ def main():
         emails_data = mail_reader.search_12306_emails(
             start_date=start_date,
             end_date=end_date,
-            limit=max_emails
+            limit=max_emails,
+            mailbox_name=mailbox_name
         )
         
         if not emails_data:
