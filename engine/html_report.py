@@ -219,6 +219,7 @@ class HTMLReportGenerator:
         td { padding: 9px 8px; border-bottom: 1px solid #eef2f7; word-break: break-word; text-align: center; }
         .compact-table th, .compact-table td { white-space: nowrap; }
         .label-cell { text-align: center; }
+        .amount-cell { text-align: right !important; }
         tbody tr:nth-child(even) { background-color: #fbfdff; }
         tbody tr:last-child td { border-bottom: none; }
         .highlight {
@@ -332,8 +333,8 @@ class HTMLReportGenerator:
         for stat in yearly_stats_sorted:
             rows.append(f"""
                 <tr>
-                    <td style="width: 56px;">{stat['year']}</td>
-                    <td style="width: 90px;">{stat['total_trips']}</td>
+                    <td>{stat['year']}</td>
+                    <td>{stat['total_trips']}</td>
                     <td>¥{self._format_amount(stat['total_spent'])}</td>
                     <td>¥{self._format_amount(stat['total_refunded'])}</td>
                     <td class="highlight">¥{self._format_amount(stat['net_spent'])}</td>
@@ -348,11 +349,11 @@ class HTMLReportGenerator:
                 <div class="table-card"><table class="compact-table">
                     <thead>
                         <tr>
-                            <th style="width: 56px;">年份</th>
-                            <th style="width: 90px;">购票</th>
-                            <th style="width: 28%;">消费金额</th>
-                            <th style="width: 28%;">退款金额</th>
-                            <th style="width: 28%;">净消费</th>
+                            <th>年份</th>
+                            <th>购票</th>
+                            <th>消费金额</th>
+                            <th>退款金额</th>
+                            <th>净消费</th>
                         </tr>
                     </thead>
                     <tbody>
