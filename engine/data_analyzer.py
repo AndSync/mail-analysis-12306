@@ -246,6 +246,12 @@ class DataAnalyzer:
         # 获取日期范围
         dates = [r['_datetime'] for r in records if '_datetime' in r]
         
+        # 计算平均票价
+        if purchase_records:
+            avg_price = sum(r.get('price', 0) for r in purchase_records if 'price' in r) / len(purchase_records)
+        else:
+            avg_price = 0
+        
         stats = {
             'total_records': len(records),
             'purchase_count': len(effective_purchase_records),
@@ -255,6 +261,7 @@ class DataAnalyzer:
             'total_spent': total_spent,
             'total_refunded': total_refunded,
             'net_spent': round(total_spent - total_refunded, 2),
+            'avg_ticket_price': round(avg_price, 2),
             'date_range': {
                 'start': min(dates).strftime("%Y-%m-%d %H:%M:%S") if dates else None,
                 'end': max(dates).strftime("%Y-%m-%d %H:%M:%S") if dates else None,
@@ -539,6 +546,55 @@ class DataAnalyzer:
         
         return passenger_stats
     
+    def get_departure_time_ranking(self, records=None):
+        """
+        获取出发时间段排行榜（按小时统计）
+        :param records: 要分析的记录列表
+        :return: 时间段统计列表，格式: [{'hour_range': '06:00-07:00', 'count': 10}, ...]
+        """
+        if records is None:
+            records = self.records
+        
+        if not records:
+            return []
+        
+        purchase_records = self._get_effective_purchase_records(records)
+        
+        # 统计每个小时的出发次数
+        hour_counter = Counter()
+        
+        for record in purchase_records:
+            dep_time = record.get('departure_datetime')
+            if dep_time:
+                try:
+                    if ' ' in dep_time:
+                        time_part = dep_time.split(' ')[1][:5]
+                    else:
+                        time_part = dep_time[:5]
+                    
+                    hour = int(time_part.split(':')[0])
+                    hour_counter[hour] += 1
+                except:
+                    continue
+        
+        # 转换为时间段格式并排序（按次数降序）
+        ranking = []
+        for hour in range(24):
+            count = hour_counter.get(hour, 0)
+            if count > 0:
+                ranking.append({
+                    'hour_range': f"{hour:02d}:00-{(hour+1)%24:02d}:00",
+                    'count': count,
+                    'hour': hour
+                })
+        
+        # 按次数降序排列，取Top 10
+        ranking.sort(key=lambda x: x['count'], reverse=True)
+        ranking = ranking[:10]
+        
+        logger.info(f"出发时间段排行榜统计完成，共{len(ranking)}个时段")
+        return ranking
+    
     def _extract_city_name(self, station_name):
         """
         从站点名称提取城市名
@@ -609,6 +665,7 @@ class DataAnalyzer:
             'seat_type_stats': self.get_seat_type_stats(filtered_records),
             'monthly_trend': self.get_monthly_trend(filtered_records),
             'passenger_stats': self.get_passenger_stats(filtered_records),
+            'departure_time_ranking': self.get_departure_time_ranking(filtered_records),
             'filter_info': {
                 'start_year': start_year,
                 'end_year': end_year,

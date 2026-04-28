@@ -56,6 +56,7 @@ class HTMLReportGenerator:
         html_parts.append(self._get_cities_section(report.get('popular_cities', {})))
         html_parts.append(self._get_trains_section(report.get('popular_trains', [])))
         html_parts.append(self._get_seat_section(report.get('seat_type_stats', [])))
+        html_parts.append(self._get_departure_time_ranking_section(report.get('departure_time_ranking', [])))
         html_parts.append(self._get_passenger_section(report.get('passenger_stats', [])))
         html_parts.append(self._get_footer(generate_time))
         html_parts.append("</div></body></html>")
@@ -178,19 +179,20 @@ class HTMLReportGenerator:
         }
         .overview-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 8px;
             margin-bottom: 4px;
         }
         .stat-card {
             background: #f7faff;
             color: #0f172a;
-            padding: 12px 12px 10px;
+            padding: 12px 4px 10px;
             border-radius: 10px;
             border: 1px solid #d4e4ff;
+            text-align: center;
         }
-        .stat-card h3 { font-size: 13px; color: #4b5b76; margin-bottom: 6px; font-weight: 700; }
-        .stat-card .value { font-size: 25px; font-weight: 500; color: #334155 !important; -webkit-text-fill-color: #334155; }
+        .stat-card h3 { font-size: 15px; color: #4b5b76; margin-bottom: 6px; font-weight: 700; text-align: center; }
+        .stat-card .value { font-size: 22px; font-weight: 500; color: #334155 !important; -webkit-text-fill-color: #334155; text-align: center; }
         .date-text {
             color: inherit !important;
             text-decoration: none !important;
@@ -277,8 +279,7 @@ class HTMLReportGenerator:
             .header p { font-size: 14px; }
             .header-meta { gap: 4px 10px; }
             .content { padding: 8px 6px 8px; }
-            .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .stat-card .value { font-size: 21px; }
+            .overview-grid { grid-template-columns: repeat(3, 1fr); }
             table { font-size: 14px; }
             th, td { padding: 8px 8px; font-size: 14px; }
         }
@@ -291,12 +292,8 @@ class HTMLReportGenerator:
         
         return f"""
             <div class="section">
-                <h2 class="section-title">总体概览</h2>
+                <h2 class="section-title">📊 总体概览</h2>
                 <div class="overview-grid">
-                    <div class="stat-card">
-                        <h3>总记录数</h3>
-                        <div class="value">{overview.get('total_records', 0)}</div>
-                    </div>
                     <div class="stat-card">
                         <h3>购票次数</h3>
                         <div class="value">{overview.get('ticket_purchase_count', overview.get('purchase_count', 0))}</div>
@@ -310,12 +307,16 @@ class HTMLReportGenerator:
                         <div class="value">{overview.get('change_count', 0)}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>总消费金额</h3>
+                        <h3>总消费</h3>
                         <div class="value">¥{self._format_amount(overview.get('total_spent', 0))}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>净消费金额</h3>
+                        <h3>净消费</h3>
                         <div class="value">¥{self._format_amount(overview.get('net_spent', 0))}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>平均票价</h3>
+                        <div class="value">¥{self._format_amount(overview.get('avg_ticket_price', 0))}</div>
                     </div>
                 </div>
             </div>
@@ -345,7 +346,7 @@ class HTMLReportGenerator:
         
         return f"""
             <div class="section">
-                <h2 class="section-title">年度统计</h2>
+                <h2 class="section-title">📅 年度统计</h2>
                 <div class="table-card"><table class="compact-table">
                     <thead>
                         <tr>
@@ -368,7 +369,7 @@ class HTMLReportGenerator:
         if not popular_cities:
             return ""
         
-        html_parts = ['<div class="section"><h2 class="section-title">城市路线</h2>']
+        html_parts = ['<div class="section"><h2 class="section-title">🏙️ 城市路线</h2>']
         
         # 出发城市
         if popular_cities.get('departures'):
@@ -435,7 +436,7 @@ class HTMLReportGenerator:
         
         return f"""
             <div class="section">
-                <h2 class="section-title">常坐列车</h2>
+                <h2 class="section-title">🚄 常坐列车</h2>
                 <div class="table-card"><table>
                     <thead>
                         <tr><th>排名</th><th>车次</th><th>乘坐次数</th><th>平均票价</th></tr>
@@ -465,7 +466,7 @@ class HTMLReportGenerator:
         
         return f"""
             <div class="section">
-                <h2 class="section-title">座位偏好</h2>
+                <h2 class="section-title">💺 座位偏好</h2>
                 <div class="table-card"><table>
                     <thead>
                         <tr><th>座位类型</th><th>选择次数</th><th>平均票价</th><th>总消费</th></tr>
@@ -494,7 +495,7 @@ class HTMLReportGenerator:
         
         return f"""
             <div class="section">
-                <h2 class="section-title">乘客统计</h2>
+                <h2 class="section-title">👤 乘客统计</h2>
                 <div class="table-card"><table>
                     <thead>
                         <tr><th>乘客姓名</th><th>出行次数</th><th>总消费</th></tr>
@@ -511,3 +512,34 @@ class HTMLReportGenerator:
         <div class="footer">
             <p>报告生成时间: {self._format_safe_date(generate_time)}</p>
         </div>"""
+    
+    def _get_departure_time_ranking_section(self, ranking):
+        """生成出发时间段排行榜HTML"""
+        if not ranking:
+            return ""
+        
+        rows = []
+        for idx, item in enumerate(ranking, 1):
+            # 处理时间段，防止被识别为超链接
+            hour_range = item['hour_range'].replace('-', '&#8209;')
+            rows.append(f"""
+                <tr>
+                    <td>{idx}</td>
+                    <td class="label-cell"><span class="date-text">{hour_range}</span></td>
+                    <td>{item['count']}</td>
+                </tr>
+            """)
+        
+        rows_html = ''.join(rows)
+        
+        return f"""
+            <div class="section">
+                <h2 class="section-title">⏰ 出发时间</h2>
+                <div class="table-card"><table>
+                    <thead>
+                        <tr><th>排名</th><th>时间段</th><th>出发次数</th></tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table></div>
+            </div>
+        """

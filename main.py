@@ -146,17 +146,6 @@ def main():
         logger.error("HTML报告生成失败")
         return
     
-    # 保存HTML文件到本地
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    html_filename = f"12306_report_{timestamp}.html"
-    
-    try:
-        with open(html_filename, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        logger.info(f"HTML报告已保存到: {html_filename}")
-    except Exception as e:
-        logger.error(f"保存HTML文件失败: {e}")
-    
     logger.info("HTML报告生成完成\n")
     
     # 步骤5: 发送邮件
@@ -172,7 +161,7 @@ def main():
         logger.info("="*60)
     else:
         logger.error("\n" + "="*60)
-        logger.error("❌ 邮件发送失败，但HTML报告已保存到本地")
+        logger.error("❌ 邮件发送失败")
         logger.info("="*60)
 
 
