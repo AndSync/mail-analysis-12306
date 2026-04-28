@@ -57,28 +57,36 @@ class DataAnalyzer:
             try:
                 # 优先使用出发日期（departure_datetime），如果没有则使用邮件接收日期（date）
                 date_str = record.get('departure_datetime') or record.get('date')
-                
-                if date_str and isinstance(date_str, str):
-                    # 尝试多种日期格式
-                    parsed = False
-                    for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%a, %d %b %Y %H:%M:%S %z"]:
-                        try:
-                            dt = datetime.strptime(date_str[:19], fmt[:19])
-                            record['_datetime'] = dt
-                            record['_year'] = dt.year
-                            record['_month'] = dt.month
-                            record['_year_month'] = f"{dt.year}-{dt.month:02d}"
-                            parsed = True
-                            break
-                        except:
-                            continue
-                    
-                    if not parsed:
-                        logger.debug(f"无法解析日期: {date_str}")
+                event_date_str = record.get('date')
+
+                event_dt = self._parse_datetime_string(event_date_str)
+                if event_dt:
+                    record['_event_datetime'] = event_dt
+
+                dt = self._parse_datetime_string(date_str)
+                if dt:
+                    record['_datetime'] = dt
+                    record['_year'] = dt.year
+                    record['_month'] = dt.month
+                    record['_year_month'] = f"{dt.year}-{dt.month:02d}"
+                elif date_str:
+                    logger.debug(f"无法解析日期: {date_str}")
             except Exception as e:
                 logger.debug(f"日期解析失败: {e}")
         
         logger.info(f"已准备 {len(self.records)} 条记录用于分析")
+
+    def _parse_datetime_string(self, value):
+        """解析常见日期时间字符串"""
+        if not value or not isinstance(value, str):
+            return None
+
+        for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%a, %d %b %Y %H:%M:%S %z"]:
+            try:
+                return datetime.strptime(value[:19], fmt[:19])
+            except:
+                continue
+        return None
     
     def _filter_records(self, start_year=None, end_year=None, start_month=None, end_month=None):
         """
@@ -133,8 +141,8 @@ class DataAnalyzer:
         order_number = record.get('order_number') or ''
         passenger_name = record.get('passenger_name') or ''
         train_number = record.get('train_number') or ''
-        departure_station = record.get('departure_station') or ''
-        arrival_station = record.get('arrival_station') or ''
+        departure_station = self._normalize_station_name(record.get('departure_station') or '')
+        arrival_station = self._normalize_station_name(record.get('arrival_station') or '')
         departure_datetime = record.get('departure_datetime') or ''
         seat_type = record.get('seat_type') or ''
         price = round(float(record.get('price', 0) or 0), 2)
@@ -159,31 +167,134 @@ class DataAnalyzer:
 
         return keys
 
+    def _match_order_cancellation(self, purchase_record, canceled_record):
+        """优先按订单号匹配，避免跨订单误抵消"""
+        purchase_order = purchase_record.get('order_number') or ''
+        canceled_order = canceled_record.get('order_number') or ''
+        if not purchase_order or not canceled_order:
+            return False
+        if purchase_order != canceled_order:
+            return False
+
+        purchase_name = purchase_record.get('passenger_name') or ''
+        canceled_name = canceled_record.get('passenger_name') or ''
+        if canceled_name and purchase_name and canceled_name != purchase_name:
+            return False
+
+        return True
+
+    def _remove_matching_active_record(self, active_records, target_record):
+        """
+        从当前有效行程中移除一条与目标记录匹配的记录
+        优先按订单号+乘客匹配，其次退回到行程特征匹配
+        """
+        for idx in range(len(active_records) - 1, -1, -1):
+            active_record = active_records[idx]
+            if self._match_order_cancellation(active_record, target_record):
+                return active_records.pop(idx)
+
+        target_keys = self._build_trip_keys(target_record)
+        for idx in range(len(active_records) - 1, -1, -1):
+            active_record = active_records[idx]
+            active_keys = set(self._build_trip_keys(active_record))
+            if any(key in active_keys for key in target_keys):
+                return active_records.pop(idx)
+
+        return None
+
+    def _get_conflict_group_key(self, record):
+        """构建最终出行冲突键：同一乘客不可能在同一时刻坐同一趟同一路线的两张票"""
+        passenger_name = record.get('passenger_name') or ''
+        train_number = record.get('train_number') or ''
+        departure_station = self._normalize_station_name(record.get('departure_station') or '')
+        arrival_station = self._normalize_station_name(record.get('arrival_station') or '')
+        departure_datetime = record.get('departure_datetime') or ''
+
+        if not (passenger_name and train_number and departure_station and arrival_station and departure_datetime):
+            return None
+
+        return (
+            passenger_name,
+            train_number,
+            departure_station,
+            arrival_station,
+            departure_datetime,
+        )
+
+    def _get_record_recency_key(self, record):
+        """用于冲突场景下选保留哪条记录：优先保留后来的邮件记录"""
+        event_dt = record.get('_event_datetime')
+        record_type = record.get('type') or ''
+        type_priority = 1 if record_type == 'change' else 0
+        return (
+            event_dt or datetime.min,
+            type_priority,
+            record.get('order_number') or '',
+        )
+
+    def _resolve_conflicting_final_records(self, records):
+        """
+        对最终行程做冲突消解：
+        同一乘客在同一时刻的同车同路线，只保留较新的那条记录。
+        返回: (resolved_records, superseded_records)
+        """
+        grouped = defaultdict(list)
+        passthrough = []
+
+        for record in records:
+            key = self._get_conflict_group_key(record)
+            if key is None:
+                passthrough.append(record)
+                continue
+            grouped[key].append(record)
+
+        resolved_records = list(passthrough)
+        superseded_records = []
+
+        for group_records in grouped.values():
+            if len(group_records) == 1:
+                resolved_records.extend(group_records)
+                continue
+
+            sorted_group = sorted(group_records, key=self._get_record_recency_key, reverse=True)
+            resolved_records.append(sorted_group[0])
+            superseded_records.extend(sorted_group[1:])
+
+        return resolved_records, superseded_records
+
     def _get_effective_purchase_records(self, records):
         """
         获取有效出行记录
-        - 退票对应的原购票记录不计入出行统计（因为没有出行）
-        - 改签对应的原购票记录仍计入出行统计（因为最终还是出行了）
+        - 退票对应的原购票记录不计入出行统计
+        - 改签对应的原购票记录不计入出行统计
+        - 改签后的新行程使用改签记录参与出行统计
         """
-        purchase_records = [r for r in records if r.get('type') == 'purchase']
-        # 只过滤退票对应的原购票，不过滤改签的
-        refund_records = [r for r in records if r.get('type') == 'refund']
-
-        canceled_counter = Counter()
-        for record in refund_records:
-            for key in self._build_trip_keys(record):
-                canceled_counter[key] += 1
+        tracked_records = [r for r in records if r.get('type') in ('purchase', 'change', 'refund')]
+        tracked_records.sort(
+            key=lambda record: (
+                record.get('_event_datetime') or datetime.min,
+                {'purchase': 0, 'change': 1, 'refund': 2}.get(record.get('type'), 9)
+            )
+        )
 
         effective_records = []
-        for record in purchase_records:
-            for key in self._build_trip_keys(record):
-                if canceled_counter[key] > 0:
-                    canceled_counter[key] -= 1
-                    break
-            else:
-                effective_records.append(record)
+        for record in tracked_records:
+            record_type = record.get('type')
 
-        return effective_records
+            if record_type == 'purchase':
+                effective_records.append(record)
+                continue
+
+            if record_type == 'change':
+                self._remove_matching_active_record(effective_records, record)
+                effective_records.append(record)
+                continue
+
+            if record_type == 'refund':
+                self._remove_matching_active_record(effective_records, record)
+
+        resolved_records, _ = self._resolve_conflicting_final_records(effective_records)
+        return resolved_records
 
     def _get_record_cashflow(self, record):
         """
@@ -212,10 +323,17 @@ class DataAnalyzer:
 
     def _sum_cashflow(self, records):
         """汇总记录的实际消费与退款金额"""
+        _, superseded_records = self._resolve_conflicting_final_records(
+            [r for r in records if r.get('type') in ('purchase', 'change')]
+        )
+        superseded_ids = {id(record) for record in superseded_records}
+
         total_spent = 0.0
         total_refunded = 0.0
 
         for record in records:
+            if id(record) in superseded_ids:
+                continue
             spent, refunded = self._get_record_cashflow(record)
             total_spent += spent
             total_refunded += refunded

@@ -292,18 +292,18 @@ class HTMLReportGenerator:
         
         return f"""
             <div class="section">
-                <h2 class="section-title">📊 总体概览</h2>
+                <h2 class="section-title">📌 总体概览</h2>
                 <div class="overview-grid">
                     <div class="stat-card">
-                        <h3>购票次数</h3>
+                        <h3>购票记录</h3>
                         <div class="value">{overview.get('ticket_purchase_count', overview.get('purchase_count', 0))}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>退票次数</h3>
+                        <h3>退票记录</h3>
                         <div class="value">{overview.get('refund_count', 0)}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>改签次数</h3>
+                        <h3>改签记录</h3>
                         <div class="value">{overview.get('change_count', 0)}</div>
                     </div>
                     <div class="stat-card">
@@ -351,7 +351,7 @@ class HTMLReportGenerator:
                     <thead>
                         <tr>
                             <th>年份</th>
-                            <th>购票</th>
+                            <th>购票记录</th>
                             <th>消费金额</th>
                             <th>退款金额</th>
                             <th>净消费</th>
@@ -369,7 +369,7 @@ class HTMLReportGenerator:
         if not popular_cities:
             return ""
         
-        html_parts = ['<div class="section"><h2 class="section-title">🏙️ 城市路线</h2>']
+        html_parts = ['<div class="section"><h2 class="section-title">🛤️ 城市路线</h2>']
         
         # 出发城市
         if popular_cities.get('departures'):
