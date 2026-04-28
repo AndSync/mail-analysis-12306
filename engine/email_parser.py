@@ -454,7 +454,7 @@ class EmailParser:
         lines = clean_body.split('\n')
         for line in lines:
             line = line.strip()
-            # 匹配以数字序号开头的行，如 "1.李志敏," 或 "1.李志敏，"
+            # 匹配以数字序号开头的行，如 "1.张三," 或 "1.张三，"
             match = re.match(r'(\d+)\.([\u4e00-\u9fa5·]{2,4})[,，]', line)
             if match:
                 passenger_info = self._extract_single_passenger_info(line)
@@ -474,7 +474,7 @@ class EmailParser:
         
         # 如果还是没有找到，尝试匹配退票/改签邮件的特殊格式（没有序号）
         if not passengers and ticket_type in ['refund', 'change']:
-            # 匹配类似 "李志敏，2026年02月12日20:40开，北京西站-郑州东站" 或 "李志敏，02月27日16:54，新乡东—北京西" 的格式
+            # 匹配类似 "张三，2024年01月15日08:00开，北京西站-上海虹桥站" 或 "李四，02月27日16:54，新乡东—北京西" 的格式
             passenger_pattern = r'([\u4e00-\u9fa5·]{2,4})[,，]\s*((?:\d{4}年)?\d{1,2}月\d{1,2}日\s*\d{2}:\d{2})'
             matches = re.finditer(passenger_pattern, clean_body)
             for match in matches:
@@ -536,7 +536,7 @@ class EmailParser:
         """
         info = {}
         
-        # 提取乘客姓名（格式：1.李志敏,）
+        # 提取乘客姓名（格式：1.张三,）
         name_match = re.match(r'\d+\.([\u4e00-\u9fa5·]{2,4})[,，]', line)
         if name_match:
             info['passenger_name'] = name_match.group(1)
@@ -673,7 +673,7 @@ class EmailParser:
             info['seat_type'] = seat_type
         
         # 提取乘客姓名（支持多种格式）
-        # 格式：1.李志敏, 或 李志敏，
+        # 格式：1.张三, 或 张三，
         match = re.search(r'\d+\.([\u4e00-\u9fa5·]{2,4})[,，]', text)
         if match:
             info['passenger_name'] = match.group(1)

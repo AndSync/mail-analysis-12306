@@ -420,7 +420,7 @@ class HTMLReportGenerator:
             return ""
         
         rows = []
-        for idx, train in enumerate(popular_trains[:15], 1):
+        for idx, train in enumerate(popular_trains[:10], 1):
             rows.append(f"""
                 <tr>
                     <td>{idx}</td>

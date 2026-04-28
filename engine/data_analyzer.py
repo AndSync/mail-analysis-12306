@@ -4,6 +4,8 @@
 from datetime import datetime
 from collections import Counter, defaultdict
 import logging
+import json
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,33 @@ class DataAnalyzer:
         :param records: 票务记录列表
         """
         self.records = records
+        self.city_mapping = self._load_city_mapping()
         self._prepare_data()
+    
+    def _load_city_mapping(self):
+        """
+        加载城市别名映射配置
+        :return: 城市别名字典 {别名: 主城市}
+        """
+        mapping = {}
+        try:
+            # 尝试从配置文件加载
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config_cities.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    city_aliases = config.get('city_aliases', {})
+                    # 构建反向映射：{别名: 主城市}
+                    for main_city, aliases in city_aliases.items():
+                        for alias in aliases:
+                            mapping[alias] = main_city
+                logger.info(f"已加载城市别名映射，共 {len(mapping)} 个站点映射")
+            else:
+                logger.debug("未找到城市别名配置文件，使用默认逻辑")
+        except Exception as e:
+            logger.warning(f"加载城市别名映射失败: {e}，使用默认逻辑")
+            
+        return mapping
     
     def _prepare_data(self):
         """数据预处理，添加日期字段"""
@@ -134,13 +162,15 @@ class DataAnalyzer:
     def _get_effective_purchase_records(self, records):
         """
         获取有效出行记录
-        已退票、已改签对应的原购票记录不再计入出行次数、城市、路线、座位等统计
+        - 退票对应的原购票记录不计入出行统计（因为没有出行）
+        - 改签对应的原购票记录仍计入出行统计（因为最终还是出行了）
         """
         purchase_records = [r for r in records if r.get('type') == 'purchase']
-        canceled_records = [r for r in records if r.get('type') in ('refund', 'change')]
+        # 只过滤退票对应的原购票，不过滤改签的
+        refund_records = [r for r in records if r.get('type') == 'refund']
 
         canceled_counter = Counter()
-        for record in canceled_records:
+        for record in refund_records:
             for key in self._build_trip_keys(record):
                 canceled_counter[key] += 1
 
@@ -531,6 +561,10 @@ class DataAnalyzer:
             if city.endswith(suffix):
                 city = city[:-len(suffix)]
                 break
+        
+        # 应用城市别名映射，将站点名合并到主城市
+        if city in self.city_mapping:
+            city = self.city_mapping[city]
         
         return city
 

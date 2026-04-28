@@ -160,23 +160,78 @@ if not year and '_datetime' in record:
     year = record['_datetime'].year
 ```
 
-**3.2 城市名称标准化**
+**3.2 城市名称标准化与别名映射**
 ```python
-# 长后缀优先匹配
-suffixes = ['火车站', '高铁站', '动车站', '城际站', '东站', '西站', '南站', '北站', '站']
+# 第一步：去除站点后缀（长后缀优先）
+suffixes = ['火车站', '高铁站', '动车站', '城际站', 
+            '东站', '西站', '南站', '北站', '站']
 
 for suffix in suffixes:
     if city.endswith(suffix):
         city = city[:-len(suffix)]
         break
+
+# 第二步：应用城市别名映射
+# 从 config_cities.json 加载映射表
+if city in self.city_mapping:
+    city = self.city_mapping[city]
+
+# 示例：
+# "郑州航空港站" → 去后缀 → "郑州航空港" → 映射 → "郑州"
+# "武昌站" → 去后缀 → "武昌" → 映射 → "武汉"
+# "北京西站" → 去后缀 → "北京西" → 映射 → "北京"
 ```
 
-**3.3 实际金额计算**
-```python
-# 退票优先使用应退票款/实退票款
-# 改签按实际补差或退差统计
-# 等价改签记为 0 / 0
+**配置文件结构 (config_cities.json)**
+```json
+{
+  "city_aliases": {
+    "武汉": ["武昌", "汉口", "汉阳", "武汉东"],
+    "北京": ["北京西", "北京南", "北京北", "北京东", "北京丰台", "北京朝阳"],
+    "郑州": ["郑州东", "郑州西", "郑州航空港"]
+  }
+}
 ```
+
+**设计原则:**
+- Key是主城市名（最终显示的名称）
+- Value是需要映射到这个城市的站点列表
+- 只包含需要映射的站点，不包含主城市本身
+- 目前包含170+个站点映射，覆盖全国主要城市
+
+**3.3 退票/改签数据处理逻辑**
+```python
+def _get_effective_purchase_records(self, records):
+    """
+    获取有效出行记录
+    - 退票对应的原购票记录不计入出行统计（因为没有出行）
+    - 改签对应的原购票记录仍计入出行统计（因为最终还是出行了）
+    """
+    purchase_records = [r for r in records if r.get('type') == 'purchase']
+    # 只过滤退票对应的原购票，不过滤改签的
+    refund_records = [r for r in records if r.get('type') == 'refund']
+
+    canceled_counter = Counter()
+    for record in refund_records:
+        for key in self._build_trip_keys(record):
+            canceled_counter[key] += 1
+
+    effective_records = []
+    for record in purchase_records:
+        for key in self._build_trip_keys(record):
+            if canceled_counter[key] > 0:
+                canceled_counter[key] -= 1
+                break
+        else:
+            effective_records.append(record)
+
+    return effective_records
+```
+
+**关键逻辑说明:**
+- **退票**: 原购票不计入出行统计，因为乘客没有实际出行
+- **改签**: 原购票仍计入出行统计，因为改签后乘客完成了出行
+- **金额计算**: 退票按退款金额统计，改签按补差/退差统计
 
 **3.4 热门路线统计**
 ```python
@@ -312,21 +367,21 @@ server.sendmail(sender_email, recipients, msg.as_string())
 ### 解析后的票务记录
 ```python
 {
-    'order_number': 'E673307420',
-    'train_number': 'G4480',
-    'departure_station': '郑州东站',
-    'arrival_station': '北京西站',
-    'departure_datetime': '2026-02-12 20:40',
-    'price': 309.0,
+    'order_number': 'E123456789',
+    'train_number': 'G1234',
+    'departure_station': '北京西站',
+    'arrival_station': '上海虹桥站',
+    'departure_datetime': '2024-01-15 08:00',
+    'price': 553.0,
     'seat_type': '二等座',
-    'passenger_name': '李志敏',
-    'carriage': '14',
-    'seat_number': '8A',
+    'passenger_name': '张三',
+    'carriage': '05',
+    'seat_number': '12A',
     'ticket_type': 'purchase',  # purchase/refund/change
-    '_year': 2026,              # 用于年度统计
+    '_year': 2024,              # 用于年度统计
     '_datetime': datetime(...), # 邮件接收时间
-    '_departure_city': '郑州',  # 标准化城市名
-    '_arrival_city': '北京'
+    '_departure_city': '北京',  # 标准化城市名
+    '_arrival_city': '上海'
 }
 ```
 
