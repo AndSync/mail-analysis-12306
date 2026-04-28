@@ -100,17 +100,36 @@ class DataAnalyzer:
         logger.info(f"过滤后剩余 {len(filtered)} 条记录")
         return filtered
 
-    def _build_trip_key(self, record):
-        """构建行程匹配键，用于识别已退票/已改签的购票记录"""
-        return (
-            record.get('passenger_name') or '',
-            record.get('train_number') or '',
-            record.get('departure_station') or '',
-            record.get('arrival_station') or '',
-            record.get('departure_datetime') or '',
-            record.get('seat_type') or '',
-            round(float(record.get('price', 0) or 0), 2),
+    def _build_trip_keys(self, record):
+        """构建多个层级的行程匹配键，用于识别已退票/已改签的购票记录"""
+        order_number = record.get('order_number') or ''
+        passenger_name = record.get('passenger_name') or ''
+        train_number = record.get('train_number') or ''
+        departure_station = record.get('departure_station') or ''
+        arrival_station = record.get('arrival_station') or ''
+        departure_datetime = record.get('departure_datetime') or ''
+        seat_type = record.get('seat_type') or ''
+        price = round(float(record.get('price', 0) or 0), 2)
+
+        keys = []
+
+        if order_number:
+            keys.append(('order', order_number, passenger_name))
+            keys.append(('order', order_number))
+
+        trip_core = (
+            passenger_name,
+            train_number,
+            departure_station,
+            arrival_station,
+            departure_datetime,
         )
+        keys.append(('trip',) + trip_core + (seat_type, price))
+        keys.append(('trip',) + trip_core + (seat_type,))
+        keys.append(('trip',) + trip_core + (price,))
+        keys.append(('trip',) + trip_core)
+
+        return keys
 
     def _get_effective_purchase_records(self, records):
         """
@@ -122,17 +141,56 @@ class DataAnalyzer:
 
         canceled_counter = Counter()
         for record in canceled_records:
-            canceled_counter[self._build_trip_key(record)] += 1
+            for key in self._build_trip_keys(record):
+                canceled_counter[key] += 1
 
         effective_records = []
         for record in purchase_records:
-            key = self._build_trip_key(record)
-            if canceled_counter[key] > 0:
-                canceled_counter[key] -= 1
-                continue
-            effective_records.append(record)
+            for key in self._build_trip_keys(record):
+                if canceled_counter[key] > 0:
+                    canceled_counter[key] -= 1
+                    break
+            else:
+                effective_records.append(record)
 
         return effective_records
+
+    def _get_record_cashflow(self, record):
+        """
+        获取单条记录对现金流的影响
+        返回: (spent, refunded)
+        """
+        record_type = record.get('type')
+        price = float(record.get('price', 0) or 0)
+        actual_spent = record.get('actual_spent_amount')
+        actual_refunded = record.get('actual_refund_amount')
+
+        if record_type == 'purchase':
+            spent = float(actual_spent if actual_spent is not None else price)
+            return spent, 0.0
+
+        if record_type == 'refund':
+            refunded = float(actual_refunded if actual_refunded is not None else price)
+            return 0.0, refunded
+
+        if record_type == 'change':
+            spent = float(actual_spent) if actual_spent is not None else 0.0
+            refunded = float(actual_refunded) if actual_refunded is not None else 0.0
+            return spent, refunded
+
+        return 0.0, 0.0
+
+    def _sum_cashflow(self, records):
+        """汇总记录的实际消费与退款金额"""
+        total_spent = 0.0
+        total_refunded = 0.0
+
+        for record in records:
+            spent, refunded = self._get_record_cashflow(record)
+            total_spent += spent
+            total_refunded += refunded
+
+        return round(total_spent, 2), round(total_refunded, 2)
     
     def get_overview_stats(self, records=None):
         """
@@ -151,16 +209,9 @@ class DataAnalyzer:
         refund_records = [r for r in records if r.get('type') == 'refund']
         change_records = [r for r in records if r.get('type') == 'change']
         
-        # 购票金额
-        total_spent = sum(r.get('price', 0) for r in purchase_records if 'price' in r)
-        
-        # 退票金额
-        total_refunded = sum(r.get('price', 0) for r in refund_records if 'price' in r)
-        
-        # 改签金额：改签视为原票退款+新票购买，所以计入消费和退款
-        change_spent = sum(r.get('price', 0) for r in change_records if 'price' in r)
-        total_spent += change_spent
-        total_refunded += change_spent
+        total_spent, total_refunded = self._sum_cashflow(
+            purchase_records + refund_records + change_records
+        )
         
         # 获取日期范围
         dates = [r['_datetime'] for r in records if '_datetime' in r]
@@ -173,7 +224,7 @@ class DataAnalyzer:
             'change_count': len(change_records),
             'total_spent': total_spent,
             'total_refunded': total_refunded,
-            'net_spent': total_spent - total_refunded,
+            'net_spent': round(total_spent - total_refunded, 2),
             'date_range': {
                 'start': min(dates).strftime("%Y-%m-%d %H:%M:%S") if dates else None,
                 'end': max(dates).strftime("%Y-%m-%d %H:%M:%S") if dates else None,
@@ -214,18 +265,14 @@ class DataAnalyzer:
             refund_records = [r for r in year_records if r.get('type') == 'refund']
             change_records = [r for r in year_records if r.get('type') == 'change']
             
-            # 购票金额
-            total_spent = sum(r.get('price', 0) for r in purchase_records if 'price' in r)
+            total_spent, total_refunded = self._sum_cashflow(
+                purchase_records + refund_records + change_records
+            )
             
-            # 退票金额
-            total_refunded = sum(r.get('price', 0) for r in refund_records if 'price' in r)
-            
-            # 改签金额：计入消费和退款
-            change_spent = sum(r.get('price', 0) for r in change_records if 'price' in r)
-            total_spent += change_spent
-            total_refunded += change_spent
-            
-            avg_price = total_spent / len(purchase_records) if purchase_records else 0
+            avg_price = (
+                sum(r.get('price', 0) for r in purchase_records if 'price' in r) / len(purchase_records)
+                if purchase_records else 0
+            )
             
             stat = {
                 'year': year,
@@ -236,7 +283,7 @@ class DataAnalyzer:
                 'avg_price': round(avg_price, 2),
             }
             
-            stat['net_spent'] = stat['total_spent'] - stat['total_refunded']
+            stat['net_spent'] = round(stat['total_spent'] - stat['total_refunded'], 2)
             
             yearly_stats.append(stat)
         
@@ -275,7 +322,9 @@ class DataAnalyzer:
                 arrival_counter[arr_city] += 1
             
             if dep_station and arr_station:
-                city_pair_counter[f"{dep_station}→{arr_station}"] += 1
+                dep_station_name = self._normalize_station_name(dep_station)
+                arr_station_name = self._normalize_station_name(arr_station)
+                city_pair_counter[f"{dep_station_name}→{arr_station_name}"] += 1
         
         # 合并出发和到达统计
         all_cities = Counter()
@@ -484,6 +533,20 @@ class DataAnalyzer:
                 break
         
         return city
+
+    def _normalize_station_name(self, station_name):
+        """
+        标准化站点名称，用于路线聚合
+        例如：北京西/北京西站 -> 北京西，郑州/郑州站 -> 郑州
+        """
+        if not station_name:
+            return ""
+
+        name = station_name.strip()
+        if name.endswith('站'):
+            name = name[:-1]
+
+        return name
     
     def generate_full_report(self, start_year=None, end_year=None, start_month=None, end_month=None):
         """

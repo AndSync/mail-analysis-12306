@@ -109,7 +109,7 @@ class HTMLReportGenerator:
         return f"""
         <div class="header">
             <h1>12306 出行统计报告</h1>
-            <p>按邮件记录整理的购票与出行画像</p>
+            <p>基于邮件记录的铁路出行画像</p>
             {filter_html}
         </div>
         <div class="content">"""

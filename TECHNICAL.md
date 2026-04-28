@@ -171,12 +171,11 @@ for suffix in suffixes:
         break
 ```
 
-**3.3 改签金额计算**
+**3.3 实际金额计算**
 ```python
-# 改签 = 原票退款 + 新票购买
-if ticket_type == 'change':
-    total_spent += price      # 新票消费
-    total_refunded += price   # 原票退款
+# 退票优先使用应退票款/实退票款
+# 改签按实际补差或退差统计
+# 等价改签记为 0 / 0
 ```
 
 **3.4 热门路线统计**

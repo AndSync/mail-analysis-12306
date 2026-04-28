@@ -83,6 +83,91 @@ class EmailParser:
             'ticket_status': r'(已支付|已退票|已改签|出票成功|订票成功|退票成功|改签成功)',
         }
 
+    def _to_float(self, value):
+        """安全转换金额"""
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _extract_financial_fields(self, text, ticket_type):
+        """
+        提取实际资金流字段
+        - purchase: actual_spent_amount
+        - refund: actual_refund_amount / refund_fee
+        - change: actual_spent_amount / actual_refund_amount / change_fee
+        """
+        info = {}
+
+        if not text:
+            return info
+
+        def last_amount(pattern):
+            matches = re.findall(pattern, text)
+            if not matches:
+                return None
+            return self._to_float(matches[-1])
+
+        face_price = last_amount(r'票价\s*([\d.]+)\s*元')
+        refund_fee = last_amount(r'退票费\s*([\d.]+)\s*元')
+        refund_amount = last_amount(r'(?:应退票款|实退票款)(?:共计)?\s*([\d.]+)\s*元')
+        original_refund_amount = last_amount(r'应退原票款共计\s*([\d.]+)\s*元')
+        new_ticket_amount = last_amount(r'新车票票款共计\s*([\d.]+)\s*元')
+        paid_delta = last_amount(r'(?:需补收票款|支付票款|补收票款|支付差额|需支付票款|补票款共计|实收票款共计)\s*([\d.]+)\s*元')
+        equal_change = '无支付和退款手续' in text
+
+        if refund_fee is not None:
+            info['refund_fee'] = refund_fee
+        if face_price is not None:
+            info['price'] = face_price
+
+        if ticket_type == 'purchase':
+            if face_price is not None:
+                info['actual_spent_amount'] = face_price
+            return info
+
+        if ticket_type == 'refund':
+            if refund_amount is not None:
+                info['actual_refund_amount'] = refund_amount
+            elif face_price is not None and refund_fee is not None:
+                info['actual_refund_amount'] = max(face_price - refund_fee, 0.0)
+            return info
+
+        if ticket_type == 'change':
+            if new_ticket_amount is not None:
+                info['new_ticket_amount'] = new_ticket_amount
+            if original_refund_amount is not None:
+                info['original_refund_amount'] = original_refund_amount
+
+            if equal_change:
+                info['actual_spent_amount'] = 0.0
+                info['actual_refund_amount'] = 0.0
+                return info
+
+            if paid_delta is not None:
+                info['actual_spent_amount'] = paid_delta
+            elif new_ticket_amount is not None and original_refund_amount is not None:
+                info['actual_spent_amount'] = max(new_ticket_amount - original_refund_amount, 0.0)
+
+            if refund_amount is not None:
+                info['actual_refund_amount'] = refund_amount
+            elif original_refund_amount is not None and new_ticket_amount is not None:
+                refund_delta = original_refund_amount - new_ticket_amount
+                if refund_delta > 0:
+                    info['actual_refund_amount'] = refund_delta
+            elif original_refund_amount is not None and paid_delta is not None:
+                info['actual_refund_amount'] = original_refund_amount
+
+            if (
+                'actual_spent_amount' not in info and
+                'actual_refund_amount' not in info and
+                refund_amount is not None and
+                new_ticket_amount is None
+            ):
+                info['actual_refund_amount'] = refund_amount
+
+        return info
+
     def _normalize_seat_type(self, seat_type):
         """标准化座位类型"""
         if not seat_type:
@@ -209,6 +294,7 @@ class EmailParser:
         date_str = email_data.get('date', '')
         clean_body = self._strip_html_tags(body)
         common_info = self._extract_with_regex(clean_body)
+        common_info.update(self._extract_financial_fields(clean_body, None))
         if body and '<' in body and '>' in body:
             html_info = self._extract_from_html(body)
             for key, value in html_info.items():
@@ -222,6 +308,9 @@ class EmailParser:
         
         # 根据邮件类型提取具体信息
         if ticket_type in ['purchase', 'refund', 'change']:
+            financial_info = self._extract_financial_fields(clean_body, ticket_type)
+            for key, value in financial_info.items():
+                common_info[key] = value
             # 提取所有乘客的信息
             all_passengers = self._extract_all_passengers(body, ticket_type, clean_body=clean_body)
             
@@ -485,6 +574,10 @@ class EmailParser:
         prices = re.findall(r'票价([\d.]+)元', line)
         if prices:
             info['price'] = float(prices[-1])
+
+        financial_info = self._extract_financial_fields(line, None)
+        if 'price' in financial_info:
+            info['price'] = financial_info['price']
         
         # 提取座位类型
         seat_type = self._extract_seat_type_from_text(line)
@@ -569,6 +662,8 @@ class EmailParser:
             prices = re.findall(self.patterns['price'], text)
             if prices:
                 info['price'] = float(prices[-1])
+
+        info.update(self._extract_financial_fields(text, None))
         
         # 提取座位类型（支持多种格式）
         # 新格式：二等座，成人票
