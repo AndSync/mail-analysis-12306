@@ -1,0 +1,24 @@
+# ClawHub publish/sync ignore (also honors .gitignore)
+
+# Git metadata (binary objects; can break publish)
+.git/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs & generated reports
+*.log
+12306_report_*.html
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+venv/
+env/
+ENV/
