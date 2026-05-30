@@ -1,16 +1,15 @@
 {
   "email": {
-    "sender_email": "781408677@qq.com",
-    "sender_password": "pplsgzbvfbgabcfh",
+    "sender_email": "your_email@example.com",
+    "sender_password": "your_imap_smtp_authorization_code",
     "recipient_email": [
-      "781408677@qq.com"
+      "recipient@example.com"
     ]
   },
   "imap_server": "imap.qq.com",
   "imap_port": 993,
   "smtp_server": "smtp.qq.com",
   "smtp_port": 465,
-  "default_combined": true,
   "analysis": {
     "mailbox_name": "网上购票",
     "max_emails": 10000,

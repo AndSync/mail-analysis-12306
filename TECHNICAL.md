@@ -110,7 +110,7 @@ train_pattern = r'([GDCKZT]\d+)次(?:列车)?'
 
 **2.3 多人订单拆分**
 ```python
-# 匹配格式：1.李志敏, 2.王某某,
+# 匹配格式：1.张三, 2.李四,
 passenger_pattern = r'\d+\.([\u4e00-\u9fa5·]{2,4})[,，]'
 
 # 提取每个乘客的完整信息
@@ -273,7 +273,7 @@ body {
     -webkit-touch-callout: none;
     user-select: none;
 ">
-2012-01-24
+2024-01-15
 </span>
 ```
 
@@ -388,14 +388,14 @@ server.sendmail(sender_email, recipients, msg.as_string())
 ### 统计数据
 ```python
 overview = {
-    'total_records': 641,
-    'purchase_count': 590,
-    'refund_count': 49,
-    'change_count': 2,
-    'total_spent': 125680.5,
-    'total_refunded': 15320.0,
-    'net_spent': 110360.5,
-    'date_range': {'start': '2012-01-24', 'end': '2026-02-15'}
+    'total_records': 128,
+    'purchase_count': 115,
+    'refund_count': 10,
+    'change_count': 3,
+    'total_spent': 28560.0,
+    'total_refunded': 1320.0,
+    'net_spent': 27240.0,
+    'date_range': {'start': '2020-03-12', 'end': '2024-12-20'}
 }
 ```
 
@@ -441,16 +441,19 @@ overview = {
 ## 扩展性
 
 ### 支持的邮箱类型
+
+默认配置面向 QQ 邮箱（**已测试**）。程序使用标准 IMAP/SMTP，其他邮箱理论上只需改 `config.json` 中的服务器地址和凭据即可，**尚未逐一实测**。
+
 ```python
-# QQ邮箱
+# QQ 邮箱（已测试）
 imap_server = 'imap.qq.com'
 smtp_server = 'smtp.qq.com'
 
-# 163邮箱
+# 163 邮箱（未测试）
 imap_server = 'imap.163.com'
 smtp_server = 'smtp.163.com'
 
-# Gmail
+# Gmail（未测试）
 imap_server = 'imap.gmail.com'
 smtp_server = 'smtp.gmail.com'
 ```
@@ -468,13 +471,13 @@ smtp_server = 'smtp.gmail.com'
 
 ### 典型运行结果
 ```
-邮件获取: 588 封
-解析记录: 641 条
-未解析: 2/588 (0.34%)
-统计时间: 2012-01-24 至 2026-02-15
-总消费: ¥125,680.50
-净消费: ¥110,360.50
-运行时间: ~3分钟
+邮件获取: 120 封
+解析记录: 128 条
+未解析: 1/120 (0.83%)
+统计时间: 2020-03-12 至 2024-12-20
+总消费: ¥28,560.00
+净消费: ¥27,240.00
+运行时间: ~2分钟
 ```
 
 ## 技术栈总结

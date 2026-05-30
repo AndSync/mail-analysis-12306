@@ -1,66 +1,40 @@
-# 12306邮件分析系统
+---
+name: mail-analysis-12306
+description: Analyze 12306 rail ticket emails via IMAP/SMTP, generate HTML travel statistics, and send the report by email. Tested with QQ Mail; other IMAP providers should work with correct server settings. Requires config.json setup before first run. Use when the user asks for 12306 trip stats, rail ticket analysis, or a travel report from mailbox.
+version: 1.0.0
+metadata: {"openclaw":{"requires":{"bins":["python3"]},"emoji":"🚄"}}
+---
 
-## 技能描述
-自动分析12306铁路购票邮件，生成详细的出行统计HTML报告并自动发送到指定邮箱。
+# 12306 邮件分析
 
-配置好邮箱后，运行程序即可自动完成：
-- 读取 12306 邮件
-- 解析购票/退票/改签记录
-- 生成 HTML 统计报告
-- 发送到配置邮箱
+从邮箱读取 12306 购票/退票/改签通知，生成 HTML 出行统计报告并发送到指定邮箱。
 
-## 核心功能
+独立 Python 工具，可直接运行；也可作为 OpenClaw skill 调用。
 
-### 📧 智能邮件读取
-- 支持QQ邮箱等IMAP协议
-- 自动搜索所有文件夹或指定文件夹(推荐)
-- 智能识别12306邮件,过滤无关内容
-- 中文文件夹名自动兼容
+## 首次配置
 
-### 🔍 精准邮件解析
-- 兼容新旧两种12306邮件格式
-- 支持购票、退票、改签全类型
-- 多人订单自动拆分统计
-- 提取车次、座位、价格等完整信息
+编辑与 `main.py` 同目录下的 `config.json`，填写：
 
-### 📊 多维度数据分析
-- **总体概览**:出行次数、消费金额、退改签统计
-- **年度统计**:按出发日期年份分组,支持时间范围筛选
-- **热门城市**:出发/到达城市TOP10
-- **热门路线**:常用路线TOP10
-- **常坐列车**:乘坐频次最高的列车
-- **座位偏好**:各座位类型统计
-- **乘客统计**:多人出行明细
+- `email.sender_email` — 邮箱地址
+- `email.sender_password` — **IMAP/SMTP 授权码或应用专用密码**（多数邮箱不是登录密码）
+- `email.recipient_email` — 报告收件人列表
+- `imap_server` / `imap_port` — 收件服务器（读取 12306 邮件）
+- `smtp_server` / `smtp_port` — 发件服务器（发送报告）
 
-### 📱 精美HTML报告
-- 响应式设计,完美适配手机和PC
-- 蓝白主题,清晰易读
-- 表格紧凑,适合长列表展示
-- 防链接识别,日期不被误转
+默认配置为 QQ 邮箱服务器地址，**目前仅在 QQ 邮箱上实测通过**。理论上任何支持 IMAP/SMTP 的邮箱，只要填对服务器和凭据即可使用，但其他邮箱尚未逐一测试，遇到问题需自行对照邮箱服务商文档调整。
 
-### ✉️ 自动发送
-- SMTP自动发送报告到邮箱
-- HTML内容直接嵌入邮件
-- 支持多收件人
+不确定配置文件在哪？先运行一次程序，未配置时会**打印 config.json 的完整绝对路径**。
 
-## 技术特点
-- **零依赖**:仅使用Python标准库,无需安装任何第三方包
-- **高兼容**:支持Python 3.6+,跨平台运行
-- **高解析率**:99.7%邮件解析成功率
-- **智能合并**:城市站点自动归并(如武昌/汉口→武汉)
-- **准确统计**:退票不计入出行,改签保留原购票记录
+### 邮箱配置示例
 
-## 使用方法
+**QQ 邮箱（已测试）**
 
-### 1. 配置邮箱
-编辑 `config.json`：
+1. 登录 QQ 邮箱网页版 → 设置 → 账户
+2. 开启 POP3/IMAP/SMTP 服务
+3. 生成授权码，填入 `sender_password`
+
 ```json
 {
-  "email": {
-    "sender_email": "your_email@qq.com",
-    "sender_password": "your_authorization_code",
-    "recipient_email": ["recipient@qq.com"]
-  },
   "imap_server": "imap.qq.com",
   "imap_port": 993,
   "smtp_server": "smtp.qq.com",
@@ -68,123 +42,46 @@
 }
 ```
 
-### 2. 获取授权码
-1. 登录QQ邮箱网页版
-2. 设置 → 账户 → POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV服务
-3. 开启IMAP/SMTP服务
-4. 生成授权码（16位字符串）
+**其他邮箱（未测试，仅供参考）**
 
-### 3. 运行程序
+在对应邮箱设置中开启 IMAP/SMTP，获取授权码或应用密码，并修改服务器地址，例如：
+
+| 邮箱 | imap_server | smtp_server |
+|------|-------------|-------------|
+| 163 | imap.163.com | smtp.163.com |
+| Gmail | imap.gmail.com | smtp.gmail.com |
+| Outlook | outlook.office365.com | smtp.office365.com |
+
+端口通常为 IMAP 993、SMTP 465（SSL）。具体以邮箱服务商说明为准。
+
+## 运行
+
 ```bash
-python main.py
+python3 main.py
 ```
 
-### 3.1 通过自然语言指令触发
-可直接通过自然语言触发，例如：
+在 OpenClaw 中：`python3 {baseDir}/main.py`
 
-```text
-帮我生成并发送12306出行统计报告
-```
+## 可选配置
 
-如果已经配置了 `analysis.mailbox_name`，会优先扫描指定文件夹；未配置时，才会回退为全邮箱搜索。
+`config.json` 的 `analysis` 段：
 
-### 4. 查看报告
-- 报告自动发送到配置的收件人邮箱
-- 也可在本地生成目录查看HTML文件
+| 字段 | 说明 | 默认 |
+|------|------|------|
+| `mailbox_name` | IMAP 文件夹，如 `网上购票` | 全邮箱搜索 |
+| `max_emails` | 最大读取封数 | 10000 |
+| `start_year` / `end_year` | 统计年份范围 | 不限 |
 
-## 配置说明
+`mailbox_name` 文件夹名因邮箱而异；QQ 邮箱常用 `网上购票`。
 
-### 可选配置项
-```json
-{
-  "analysis": {
-    "mailbox_name": "网上购票",  // 指定文件夹（推荐，速度更快）
-    "max_emails": 10000,          // 最大邮件数量
-    "start_year": 2012,           // 开始年份
-    "end_year": 2026              // 结束年份
-  }
-}
-```
+## 故障排查
 
-### 文件夹名称说明
-QQ邮箱 IMAP 文件夹名底层使用 Modified UTF-7 编码，但现在可以直接配置中文文件夹名，程序会自动转换并匹配。
+| 现象 | 处理 |
+|------|------|
+| 提示邮箱未配置 | 按报错中的路径编辑 `config.json` |
+| IMAP 连接失败 | 确认授权码正确、IMAP 已开启 |
+| 邮件很少 | 设置 `analysis.mailbox_name` 为 `网上购票` |
 
-例如：
-- `网上购票`
-- `收件箱/网上购票`
+## 参考
 
-如需排查，也可使用编码后的名称：
-- `网上购票` → `&f1FOCo0teWg-`
-
-## 数据统计规则
-
-### ⏰ 时间维度
-- 按**出发日期**的年份分组(而非邮件接收日期)
-- 避免跨年车次统计错误
-
-### 💰 金额计算
-- **购票**:计入消费金额
-- **退票**:按应退票款/实退票款计入退款,识别退票费
-- **改签**:按实际补差或退差统计;等价改签不计额外费用
-- **净消费** = 消费金额 - 退款金额
-
-### 🏙️ 城市名称智能合并
-系统内置全国主要城市的站点映射表,自动将同一城市的不同站点合并统计:
-
-**示例:**
-- 武昌、汉口、汉阳、武汉东 → **武汉**
-- 北京西、北京南、北京北、北京东 → **北京**
-- 郑州东、郑州西、郑州航空港 → **郑州**
-- 上海虹桥、上海南、上海西 → **上海**
-
-配置文件 `config_cities.json` 包含170+个站点的映射关系,覆盖全国主要城市。
-
-### 💺 座位类型标准化
-- 硬卧上/中/下铺 → **硬卧**
-- 软卧上/下铺 → **软卧**
-- 动卧上/下铺 → **动卧**
-- 无座/车无座 → **无座**
-- 无法明确归类的泛化"卧铺"不纳入座位偏好统计
-
-### 👥 多人订单处理
-- 一封邮件包含多个乘客时,按人拆分统计
-- 每人单独统计出行次数和消费金额
-
-## 注意事项
-1. 邮箱密码使用**授权码**，不是登录密码
-2. 未指定文件夹时，首次运行可能会遍历所有文件夹，耗时较长
-3. 建议配置 `mailbox_name` 提升速度，指定文件夹时通常明显更快
-4. HTML报告文件名格式：`12306_report_YYYYMMDD_HHMMSS.html`
-
-## 文件说明
-```
-mail-analysis-12306/
-├── main.py              # 主程序入口
-├── engine/              # 核心模块目录
-│   ├── mail_reader.py   # 邮件读取模块
-│   ├── email_parser.py  # 邮件解析模块
-│   ├── data_analyzer.py # 数据分析模块
-│   ├── html_report.py   # HTML报告生成
-│   └── email_sender.py  # 邮件发送模块
-├── config.json          # 邮箱配置文件
-├── config_cities.json   # 城市站点映射配置
-├── SKILL.md             # 技能说明文档(本文档)
-└── TECHNICAL.md         # 技术实现文档
-```
-
-## 常见问题
-
-### Q: 为什么只获取到部分邮件？
-A: 目前优先建议配置具体文件夹，例如 `网上购票`。如果不配置文件夹，则会走全邮箱搜索，耗时更长但覆盖更完整。
-
-### Q: 解析失败怎么办？
-A: 目前解析成功率99.7%，失败的多为列车停运通知等特殊邮件，不影响统计。
-
-### Q: 如何指定时间范围？
-A: 在config.json中配置 `start_year` 和 `end_year`。
-
-### Q: 能否通过自然语言指令触发？
-A: 可以。通过支持的AI助手发送指令即可自动生成并发送报告。
-
-### Q: 支持其他邮箱吗？
-A: 支持所有IMAP/SMTP邮箱，修改配置文件中的服务器地址即可。
+- 技术细节见 [TECHNICAL.md](TECHNICAL.md)

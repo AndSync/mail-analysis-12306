@@ -4,11 +4,15 @@
 """
 import json
 import logging
+import os
 import sys
 from datetime import datetime
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
+
 # 导入engine模块
-sys.path.insert(0, 'engine')
+sys.path.insert(0, os.path.join(BASE_DIR, 'engine'))
 from mail_reader import MailReader
 from email_parser import EmailParser
 from data_analyzer import DataAnalyzer
@@ -21,23 +25,62 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('analysis.log', encoding='utf-8', mode='w')
+        logging.FileHandler(os.path.join(BASE_DIR, 'analysis.log'), encoding='utf-8', mode='w')
     ]
 )
 
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_path='config.json'):
+def _is_placeholder(value):
+    if not value:
+        return True
+    if isinstance(value, str):
+        return value.startswith('your_') or value.endswith('@example.com')
+    return False
+
+
+def _validate_config(config):
+    email_cfg = config.get('email', {})
+    missing = []
+    for key in ('sender_email', 'sender_password', 'recipient_email'):
+        value = email_cfg.get(key)
+        if key == 'recipient_email':
+            if not value or not isinstance(value, list) or not value[0]:
+                missing.append(key)
+            elif _is_placeholder(value[0]):
+                missing.append(key)
+        elif _is_placeholder(value):
+            missing.append(key)
+
+    if missing:
+        logger.error(
+            f"邮箱尚未配置（缺少: {', '.join(missing)}）。请编辑:\n  {CONFIG_PATH}\n"
+            "填写 email.sender_email、email.sender_password（IMAP 授权码，非登录密码）、"
+            "email.recipient_email 后重新运行。"
+        )
+        return False
+    return True
+
+
+def load_config(config_path=CONFIG_PATH):
     """加载配置文件"""
+    if not os.path.exists(config_path):
+        logger.error(f"未找到配置文件，请创建并编辑:\n  {config_path}")
+        sys.exit(1)
+
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        logger.info("配置文件加载成功")
-        return config
     except Exception as e:
         logger.error(f"加载配置文件失败: {e}")
         sys.exit(1)
+
+    if not _validate_config(config):
+        sys.exit(1)
+
+    logger.info("配置文件加载成功")
+    return config
 
 
 def main():
