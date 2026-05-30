@@ -1,0 +1,21 @@
+{
+  "email": {
+    "sender_email": "your_email@example.com",
+    "sender_password": "your_imap_smtp_authorization_code",
+    "recipient_email": [
+      "recipient@example.com"
+    ]
+  },
+  "imap_server": "imap.qq.com",
+  "imap_port": 993,
+  "smtp_server": "smtp.qq.com",
+  "smtp_port": 465,
+  "analysis": {
+    "mailbox_name": "网上购票",
+    "max_emails": 10000,
+    "start_year": null,
+    "end_year": null,
+    "start_month": null,
+    "end_month": null
+  }
+}
