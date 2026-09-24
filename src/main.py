@@ -8,10 +8,22 @@ import os
 import sys
 from datetime import datetime
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))          # src/
+REPO_ROOT = os.path.dirname(BASE_DIR)                          # 仓库根目录
 
-# 导入engine模块
+
+def _resolve_config_path():
+    """配置路径优先级：--config 参数 > MAIL12306_CONFIG 环境变量 > config/config.json"""
+    if '--config' in sys.argv:
+        idx = sys.argv.index('--config')
+        if idx + 1 < len(sys.argv):
+            return sys.argv[idx + 1]
+    return os.environ.get('MAIL12306_CONFIG') or os.path.join(REPO_ROOT, 'config', 'config.json')
+
+
+CONFIG_PATH = _resolve_config_path()
+
+# 导入engine模块（与本文件同级的 engine/）
 sys.path.insert(0, os.path.join(BASE_DIR, 'engine'))
 from mail_reader import MailReader
 from email_parser import EmailParser

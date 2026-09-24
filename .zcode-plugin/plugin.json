@@ -1,0 +1,58 @@
+{
+  "name": "mail-analysis-12306",
+  "version": "0.6.1",
+  "description": "分析邮箱中的 12306 购票/退票/改签邮件，生成出行统计 HTML 报告并发送到你的邮箱。首次使用请在插件详情→高级设置中填写邮箱信息",
+  "author": { "name": "ZCodeProject" },
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json",
+  "userConfig": {
+    "sender_email": {
+      "type": "string",
+      "title": "邮箱地址（读取12306邮件，同时作为发件账号）",
+      "default": "",
+      "description": "读取 12306 购票/退票/改签邮件的邮箱账号。生成的分析报告也通过 SMTP 从这个账号发出（发件箱），即扫描邮件和发送报告共用同一个邮箱。"
+    },
+    "sender_password": {
+      "type": "string",
+      "title": "IMAP/SMTP 授权码",
+      "default": "",
+      "description": "上述邮箱的 IMAP/SMTP 授权码或应用专用密码（不是登录密码）。QQ 邮箱：设置→账户→开启 POP3/IMAP/SMTP 服务→生成授权码。注意：ZCode 暂未提供凭据加密存储，此值会明文保存在本机配置中。"
+    },
+    "recipient_email": {
+      "type": "string",
+      "title": "报告收件人",
+      "default": "",
+      "description": "出行统计 HTML 报告的收件邮箱"
+    },
+    "mailbox_name": {
+      "type": "string",
+      "title": "12306 邮件所在文件夹（扫描范围，可选）",
+      "default": "网上购票",
+      "description": "只扫描该 IMAP 文件夹，速度快；留空则扫描全邮箱（较慢）。QQ 邮箱的 12306 邮件通常在「网上购票」。"
+    },
+    "imap_server": {
+      "type": "string",
+      "title": "IMAP 服务器（收件）",
+      "default": "imap.qq.com",
+      "description": "读取 12306 邮件的收件服务器地址"
+    },
+    "imap_port": {
+      "type": "number",
+      "title": "IMAP 端口",
+      "default": 993,
+      "description": "收件服务器端口，QQ 邮箱为 993（SSL）"
+    },
+    "smtp_server": {
+      "type": "string",
+      "title": "SMTP 服务器（发件）",
+      "default": "smtp.qq.com",
+      "description": "发送分析报告的服务器地址"
+    },
+    "smtp_port": {
+      "type": "number",
+      "title": "SMTP 端口",
+      "default": 465,
+      "description": "发件服务器端口，QQ 邮箱为 465（SSL）"
+    }
+  }
+}

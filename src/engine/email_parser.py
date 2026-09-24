@@ -151,6 +151,7 @@ class EmailParser:
 
             if refund_amount is not None:
                 info['actual_refund_amount'] = refund_amount
+                info['_has_explicit_refund'] = True  # 邮件明确写了实退/应退票款
             elif original_refund_amount is not None and new_ticket_amount is not None:
                 refund_delta = original_refund_amount - new_ticket_amount
                 if refund_delta > 0:
@@ -335,6 +336,13 @@ class EmailParser:
                 for key, value in common_info.items():
                     record.setdefault(key, value)
                 record.update(passenger_info)
+
+                # 修正购票实付金额：多人/联程邮件中 common_info 的实付取的是全邮件
+                # 最后一个"票价"，会算错（如 4 人 253/253/253/169 只记 169）。
+                # 每张票的票价即实付，用该乘客自己的 price 覆盖。
+                if ticket_type == 'purchase' and record.get('price') is not None:
+                    record['actual_spent_amount'] = float(record['price'])
+
                 if record.get('seat_type'):
                     record['seat_type'] = self._normalize_seat_type(record['seat_type'])
                 
@@ -407,6 +415,8 @@ class EmailParser:
             return 'refund'
         if '改签' in subject or '变更' in subject:
             return 'change'
+        if '候补' in subject and '退单' in subject:
+            return None  # 候补订单退单：未出票，不算购票/退票
         if '候补' in subject and ('兑现' in subject or '成功' in subject):
             return 'purchase'  # 候补兑现成功也算购票
         if '支付' in subject or '购票' in subject or '订票' in subject or '出票' in subject:

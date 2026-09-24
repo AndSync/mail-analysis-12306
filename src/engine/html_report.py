@@ -72,22 +72,29 @@ class HTMLReportGenerator:
     def _build_html(self, report):
         """构建完整的HTML文档"""
         generate_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         html_parts = []
         html_parts.append(self._get_html_header())
         html_parts.append(self._get_body_start(report.get('filter_info', {}), report.get('overview', {})))
-        html_parts.append(self._get_overview_section(report.get('overview', {})))
-        html_parts.append(self._get_yearly_section(report.get('yearly_stats', [])))
-        html_parts.append(self._get_cities_section(report.get('popular_cities', {})))
-        html_parts.append(self._get_trains_section(report.get('popular_trains', [])))
-        html_parts.append(self._get_seat_section(report.get('seat_type_stats', [])))
-        html_parts.append(self._get_departure_time_ranking_section(report.get('departure_time_ranking', [])))
-        html_parts.append(self._get_passenger_section(report.get('passenger_stats', [])))
+        html_parts.append(self._render_sections(report, include_passenger_stats=True))
         html_parts.append(self._get_footer(generate_time))
         html_parts.append("</div></body></html>")
-        
+
         return ''.join(html_parts)
-    
+
+    def _render_sections(self, report, include_passenger_stats=True):
+        """按顺序渲染各统计小节"""
+        parts = []
+        parts.append(self._get_overview_section(report.get('overview', {})))
+        parts.append(self._get_yearly_section(report.get('yearly_stats', [])))
+        parts.append(self._get_cities_section(report.get('popular_cities', {})))
+        parts.append(self._get_trains_section(report.get('popular_trains', [])))
+        parts.append(self._get_seat_section(report.get('seat_type_stats', [])))
+        parts.append(self._get_departure_time_ranking_section(report.get('departure_time_ranking', [])))
+        if include_passenger_stats:
+            parts.append(self._get_passenger_section(report.get('passenger_stats', [])))
+        return ''.join(parts)
+
     def _get_html_header(self):
         """获取HTML头部"""
         return f"""<!DOCTYPE html>
@@ -247,6 +254,7 @@ class HTMLReportGenerator:
         td { padding: 9px 8px; border-bottom: 1px solid #eef2f7; word-break: break-word; text-align: center; font-size: 15px !important; }
         .compact-table th, .compact-table td { white-space: nowrap; }
         .label-cell { text-align: center; }
+        .route-cell { white-space: nowrap; }
         .amount-cell { text-align: right !important; }
         tbody tr:nth-child(even) { background-color: #fbfdff; }
         tbody tr:last-child td { border-bottom: none; }
@@ -316,14 +324,14 @@ class HTMLReportGenerator:
         """生成概览部分HTML"""
         if not overview:
             return ""
-        
+
         return f"""
             <div class="section">
                 <h2 class="section-title">📌 总体概览</h2>
                 <div class="overview-grid">
                     <div class="stat-card">
-                        <h3>购票记录</h3>
-                        <div class="value">{overview.get('ticket_purchase_count', overview.get('purchase_count', 0))}</div>
+                        <h3>出行次数</h3>
+                        <div class="value">{overview.get('purchase_count', 0)}</div>
                     </div>
                     <div class="stat-card">
                         <h3>退票记录</h3>
@@ -334,12 +342,12 @@ class HTMLReportGenerator:
                         <div class="value">{overview.get('change_count', 0)}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>总消费</h3>
-                        <div class="value">¥{self._format_amount(overview.get('total_spent', 0))}</div>
+                        <h3>消费总额</h3>
+                        <div class="value">¥{self._format_amount(overview.get('net_spent', 0))}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>净消费</h3>
-                        <div class="value">¥{self._format_amount(overview.get('net_spent', 0))}</div>
+                        <h3>退改扣费</h3>
+                        <div class="value">¥{self._format_amount(overview.get('refund_change_fee', 0))}</div>
                     </div>
                     <div class="stat-card">
                         <h3>平均票价</h3>
@@ -363,14 +371,13 @@ class HTMLReportGenerator:
                 <tr>
                     <td>{stat['year']}</td>
                     <td>{stat['total_trips']}</td>
-                    <td>¥{self._format_amount(stat['total_spent'])}</td>
-                    <td>¥{self._format_amount(stat['total_refunded'])}</td>
                     <td class="highlight">¥{self._format_amount(stat['net_spent'])}</td>
+                    <td>¥{self._format_amount(stat.get('avg_price', 0))}</td>
                 </tr>
             """)
-        
+
         rows_html = ''.join(rows)
-        
+
         return f"""
             <div class="section">
                 <h2 class="section-title">📅 年度统计</h2>
@@ -378,10 +385,9 @@ class HTMLReportGenerator:
                     <thead>
                         <tr>
                             {self._header_cell('年份')}
-                            {self._header_cell('购票记录')}
-                            {self._header_cell('消费金额')}
-                            {self._header_cell('退款金额')}
-                            {self._header_cell('净消费')}
+                            {self._header_cell('出行次数')}
+                            {self._header_cell('消费总额')}
+                            {self._header_cell('平均票价')}
                         </tr>
                     </thead>
                     <tbody>
@@ -390,7 +396,7 @@ class HTMLReportGenerator:
                 </table></div>
             </div>
         """
-    
+
     def _get_cities_section(self, popular_cities):
         """生成城市统计部分HTML"""
         if not popular_cities:
@@ -402,40 +408,44 @@ class HTMLReportGenerator:
         if popular_cities.get('departures'):
             rows = []
             for idx, city in enumerate(popular_cities['departures'][:10], 1):
-                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell\">{city['city']}</td><td>{city['count']}</td></tr>")
-            
+                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell\">{city['city']}</td><td>{city['count']}</td>"
+                            f"<td class=\"highlight\">¥{self._format_amount(city.get('total_spent', 0))}</td></tr>")
+
             html_parts.append(f"""
                 <h3 class="subsection-title">出发城市</h3>
                 <div class="table-card"><table>
-                    <thead><tr>{self._header_cell('排名')}{self._header_cell('城市')}{self._header_cell('出发次数')}</tr></thead>
+                    <thead><tr>{self._header_cell('排名')}{self._header_cell('城市')}{self._header_cell('出发次数')}{self._header_cell('消费总额')}</tr></thead>
                     <tbody>{''.join(rows)}</tbody>
                 </table></div>
             """)
-        
+
         # 到达城市
         if popular_cities.get('arrivals'):
             rows = []
             for idx, city in enumerate(popular_cities['arrivals'][:10], 1):
-                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell\">{city['city']}</td><td>{city['count']}</td></tr>")
-            
+                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell\">{city['city']}</td><td>{city['count']}</td>"
+                            f"<td class=\"highlight\">¥{self._format_amount(city.get('total_spent', 0))}</td></tr>")
+
             html_parts.append(f"""
                 <h3 class="subsection-title">到达城市</h3>
                 <div class="table-card"><table>
-                    <thead><tr>{self._header_cell('排名')}{self._header_cell('城市')}{self._header_cell('到达次数')}</tr></thead>
+                    <thead><tr>{self._header_cell('排名')}{self._header_cell('城市')}{self._header_cell('到达次数')}{self._header_cell('消费总额')}</tr></thead>
                     <tbody>{''.join(rows)}</tbody>
                 </table></div>
             """)
-        
+
         # 热门路线
         if popular_cities.get('routes'):
+            routes = popular_cities['routes']
             rows = []
-            for idx, route in enumerate(popular_cities['routes'][:10], 1):
-                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell\">{route['route']}</td><td>{route['count']}</td></tr>")
-            
+            for idx, route in enumerate(routes, 1):
+                rows.append(f"<tr><td>{idx}</td><td class=\"label-cell route-cell\">{route['route']}</td><td>{route['count']}</td>"
+                            f"<td class=\"highlight\">¥{self._format_amount(route.get('total_spent', 0))}</td></tr>")
+
             html_parts.append(f"""
                 <h3 class="subsection-title">热门路线</h3>
-                <div class="table-card"><table style="width: 100%;">
-                    <thead><tr>{self._header_cell('排名', '52px')}{self._header_cell('路线', '74%')}{self._header_cell('次数', '64px')}</tr></thead>
+                <div class="table-card"><table>
+                    <thead><tr>{self._header_cell('排名', '52px')}{self._header_cell('路线', '46%')}{self._header_cell('次数', '56px')}{self._header_cell('消费总额', '88px')}</tr></thead>
                     <tbody>{''.join(rows)}</tbody>
                 </table></div>
             """)
@@ -449,24 +459,24 @@ class HTMLReportGenerator:
             return ""
         
         rows = []
-        for idx, train in enumerate(popular_trains[:10], 1):
+        for idx, train in enumerate(popular_trains, 1):
             rows.append(f"""
                 <tr>
                     <td>{idx}</td>
                     <td class="label-cell">{train['train_number']}</td>
                     <td>{train['count']}</td>
-                    <td>¥{self._format_amount(train['avg_price'])}</td>
+                    <td class="highlight">¥{self._format_amount(train['total_spent'])}</td>
                 </tr>
             """)
-        
+
         rows_html = ''.join(rows)
-        
+
         return f"""
             <div class="section">
                 <h2 class="section-title">🚄 常坐列车</h2>
                 <div class="table-card"><table>
                     <thead>
-                        <tr>{self._header_cell('排名')}{self._header_cell('车次')}{self._header_cell('乘坐次数')}{self._header_cell('平均票价')}</tr>
+                        <tr>{self._header_cell('排名')}{self._header_cell('车次')}{self._header_cell('乘坐次数')}{self._header_cell('消费总额')}</tr>
                     </thead>
                     <tbody>{rows_html}</tbody>
                 </table></div>
@@ -479,24 +489,24 @@ class HTMLReportGenerator:
             return ""
         
         rows = []
-        for seat in seat_type_stats:
+        for idx, seat in enumerate(seat_type_stats, 1):
             rows.append(f"""
                 <tr>
+                    <td>{idx}</td>
                     <td class="label-cell">{seat['seat_type']}</td>
                     <td>{seat['count']}</td>
-                    <td>¥{self._format_amount(seat['avg_price'])}</td>
-                    <td class="highlight">¥{self._format_amount(seat['total_spent'])}</td>
+                    <td class="highlight">¥{self._format_amount(seat['avg_price'])}</td>
                 </tr>
             """)
-        
+
         rows_html = ''.join(rows)
-        
+
         return f"""
             <div class="section">
                 <h2 class="section-title">💺 座位偏好</h2>
                 <div class="table-card"><table>
                     <thead>
-                        <tr>{self._header_cell('座位类型')}{self._header_cell('选择次数')}{self._header_cell('平均票价')}{self._header_cell('总消费')}</tr>
+                        <tr>{self._header_cell('排名')}{self._header_cell('座位类型')}{self._header_cell('选择次数')}{self._header_cell('平均票价')}</tr>
                     </thead>
                     <tbody>{rows_html}</tbody>
                 </table></div>
@@ -509,23 +519,24 @@ class HTMLReportGenerator:
             return ""
         
         rows = []
-        for passenger in passenger_stats:
+        for idx, passenger in enumerate(passenger_stats, 1):
             rows.append(f"""
                 <tr>
+                    <td>{idx}</td>
                     <td class="label-cell">{passenger['passenger_name']}</td>
                     <td>{passenger['trip_count']}</td>
-                    <td class="highlight">¥{self._format_amount(passenger['total_spent'])}</td>
+                    <td class="highlight">¥{self._format_amount(passenger.get('net_spent', 0))}</td>
                 </tr>
             """)
-        
+
         rows_html = ''.join(rows)
-        
+
         return f"""
             <div class="section">
                 <h2 class="section-title">🧑 乘客统计</h2>
                 <div class="table-card"><table>
                     <thead>
-                        <tr>{self._header_cell('乘客姓名')}{self._header_cell('出行次数')}{self._header_cell('总消费')}</tr>
+                        <tr>{self._header_cell('排名')}{self._header_cell('乘客姓名')}{self._header_cell('出行次数')}{self._header_cell('消费总额')}</tr>
                     </thead>
                     <tbody>{rows_html}</tbody>
                 </table></div>
@@ -556,9 +567,9 @@ class HTMLReportGenerator:
                     <td>{item['count']}</td>
                 </tr>
             """)
-        
+
         rows_html = ''.join(rows)
-        
+
         return f"""
             <div class="section">
                 <h2 class="section-title">⏰ 出发时间</h2>

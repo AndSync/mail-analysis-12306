@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "mail12306": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp_server.py"],
+      "env": {
+        "MAIL12306_SENDER_EMAIL": "${user_config.sender_email}",
+        "MAIL12306_SENDER_PASSWORD": "${user_config.sender_password}",
+        "MAIL12306_RECIPIENT_EMAIL": "${user_config.recipient_email}",
+        "MAIL12306_IMAP_SERVER": "${user_config.imap_server}",
+        "MAIL12306_SMTP_SERVER": "${user_config.smtp_server}",
+        "MAIL12306_IMAP_PORT": "${user_config.imap_port}",
+        "MAIL12306_SMTP_PORT": "${user_config.smtp_port}",
+        "MAIL12306_MAILBOX_NAME": "${user_config.mailbox_name}"
+      }
+    }
+  }
+}
