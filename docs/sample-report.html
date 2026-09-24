@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="format-detection" content="telephone=no,email=no,address=no,url=no">
+    <meta name="color-scheme" content="light only">
+    <meta name="supported-color-schemes" content="light">
+    <title>12306出行统计报告</title>
+    <style>
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: #eef5ff;
+            padding: 6px;
+            line-height: 1.6;
+            color: #1f2937;
+            color-scheme: light only;
+        }
+        .container {
+            max-width: 1180px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #cfe0ff;
+            box-shadow: none;
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #1c64f2 0%, #2f80ed 60%, #4f9cf9 100%);
+            color: #fff;
+            padding: 14px 10px 10px;
+            text-align: center;
+            -webkit-text-fill-color: #ffffff;
+        }
+        .header h1 { font-size: 26px !important; line-height: 1.2; margin-bottom: 2px; letter-spacing: 0; font-weight: 700; color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+        .header p { font-size: 15px !important; line-height: 1.35; opacity: 0.96; color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+        .header-meta {
+            margin-top: 6px;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 6px 16px;
+        }
+        .header-meta-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            opacity: 0.98;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff;
+        }
+        .header-date {
+            color: #fff3a3;
+            font-weight: 600;
+            -webkit-text-fill-color: #fff3a3;
+        }
+        .content { padding: 14px 14px 12px; }
+        .section { margin-bottom: 14px; }
+        .section-title {
+            font-size: 20px !important;
+            line-height: 1.25;
+            color: #0f172a;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #dbe5f0;
+            font-weight: 700;
+        }
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        .stat-card {
+            background: #f7faff;
+            color: #0f172a;
+            padding: 12px 4px 10px;
+            border-radius: 10px;
+            border: 1px solid #d4e4ff;
+            text-align: center;
+        }
+        .stat-card h3 { font-size: 15px !important; line-height: 1.3; color: #4b5b76; margin-bottom: 6px; font-weight: 700; text-align: center; }
+        .stat-card .value { font-size: 22px !important; line-height: 1.2; font-weight: 500; color: #334155 !important; -webkit-text-fill-color: #334155; text-align: center; }
+        .date-text {
+            color: inherit !important;
+            text-decoration: none !important;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        .table-card {
+            border: 1px solid #d8e5fb;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #fff;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0;
+            background: white;
+            font-size: 15px;
+            table-layout: fixed;
+        }
+        thead {
+            background: #eaf2ff;
+            color: #0f172a;
+        }
+        th { padding: 10px 8px; text-align: center; font-weight: 700; word-break: keep-all; font-size: 15px !important; }
+        td { padding: 9px 8px; border-bottom: 1px solid #eef2f7; word-break: break-word; text-align: center; font-size: 15px !important; }
+        .compact-table th, .compact-table td { white-space: nowrap; }
+        .label-cell { text-align: center; }
+        .route-cell { white-space: nowrap; }
+        .amount-cell { text-align: right !important; }
+        tbody tr:nth-child(even) { background-color: #fbfdff; }
+        tbody tr:last-child td { border-bottom: none; }
+        .highlight {
+            color: #d14343 !important;
+            -webkit-text-fill-color: #d14343;
+            font-weight: 500;
+        }
+        .footer {
+            text-align: center;
+            padding: 14px 12px 16px;
+            color: #64748b;
+            border-top: 1px solid #e2ebfb;
+            font-size: 13px;
+            background: #f7faff;
+        }
+        h3.subsection-title {
+            margin: 12px 0 7px;
+            color: #334155;
+            font-size: 16px !important;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+        a[x-apple-data-detectors], .date-text a {
+            color: inherit !important;
+            text-decoration: none !important;
+            pointer-events: none !important;
+        }
+        [data-ogsc] .header,
+        [data-ogsc] .header h1,
+        [data-ogsc] .header p,
+        [data-ogsc] .header-meta-item,
+        [data-ogsc] .header-date {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        [data-ogsc] .header-date {
+            color: #fff3a3 !important;
+            -webkit-text-fill-color: #fff3a3 !important;
+        }
+        [data-ogsc] .highlight {
+            color: #d14343 !important;
+            -webkit-text-fill-color: #d14343 !important;
+        }
+        [data-ogsc] .stat-card .value {
+            color: #334155 !important;
+            -webkit-text-fill-color: #334155 !important;
+        }
+        @media (min-width: 1024px) {
+            .content { padding: 18px 20px 16px; }
+        }
+        @media (max-width: 768px) {
+            body { padding: 0; }
+            .container { border-radius: 10px; }
+            .header { padding: 14px 8px 10px; }
+            .header h1 { font-size: 21px !important; }
+            .header p { font-size: 14px; }
+            .header-meta { gap: 4px 10px; }
+            .content { padding: 8px 6px 8px; }
+            .overview-grid { grid-template-columns: repeat(3, 1fr); }
+            table { font-size: 14px; }
+            th, td { padding: 8px 8px; font-size: 14px; }
+        }
+        
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>12306 出行统计报告</h1>
+            <p>基于邮件记录的铁路出行画像</p>
+            <div class="header-meta"><span class="header-meta-item">数据时间: <span class="header-date"><span class="date-text">2015&#8209;01&#8209;03</span> 至 <span class="date-text">2026&#8209;09&#8209;30</span></span></span></div>
+        </div>
+        <div class="content">
+            <div class="section">
+                <h2 class="section-title">📌 总体概览</h2>
+                <div class="overview-grid">
+                    <div class="stat-card">
+                        <h3>出行次数</h3>
+                        <div class="value">355</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>退票记录</h3>
+                        <div class="value">123</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>改签记录</h3>
+                        <div class="value">73</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>消费总额</h3>
+                        <div class="value">¥65754.5</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>退改扣费</h3>
+                        <div class="value">¥1489</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>平均票价</h3>
+                        <div class="value">¥191.3</div>
+                    </div>
+                </div>
+            </div>
+        
+            <div class="section">
+                <h2 class="section-title">📅 年度统计</h2>
+                <div class="table-card"><table class="compact-table">
+                    <thead>
+                        <tr>
+                            <th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">年份</th>
+                            <th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">出行次数</th>
+                            <th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">消费总额</th>
+                            <th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">平均票价</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+                <tr>
+                    <td>2026</td>
+                    <td>28</td>
+                    <td class="highlight">¥4940</td>
+                    <td>¥209.5</td>
+                </tr>
+            
+                <tr>
+                    <td>2025</td>
+                    <td>31</td>
+                    <td class="highlight">¥5520</td>
+                    <td>¥180.4</td>
+                </tr>
+            
+                <tr>
+                    <td>2024</td>
+                    <td>39</td>
+                    <td class="highlight">¥5952.5</td>
+                    <td>¥176.9</td>
+                </tr>
+            
+                <tr>
+                    <td>2023</td>
+                    <td>47</td>
+                    <td class="highlight">¥9373.5</td>
+                    <td>¥204.7</td>
+                </tr>
+            
+                <tr>
+                    <td>2022</td>
+                    <td>8</td>
+                    <td class="highlight">¥1700</td>
+                    <td>¥193.4</td>
+                </tr>
+            
+                <tr>
+                    <td>2021</td>
+                    <td>8</td>
+                    <td class="highlight">¥2081</td>
+                    <td>¥253.9</td>
+                </tr>
+            
+                <tr>
+                    <td>2020</td>
+                    <td>5</td>
+                    <td class="highlight">¥1081</td>
+                    <td>¥216.2</td>
+                </tr>
+            
+                <tr>
+                    <td>2019</td>
+                    <td>25</td>
+                    <td class="highlight">¥4929.5</td>
+                    <td>¥201.7</td>
+                </tr>
+            
+                <tr>
+                    <td>2018</td>
+                    <td>39</td>
+                    <td class="highlight">¥6853</td>
+                    <td>¥166.6</td>
+                </tr>
+            
+                <tr>
+                    <td>2017</td>
+                    <td>31</td>
+                    <td class="highlight">¥4842</td>
+                    <td>¥156.6</td>
+                </tr>
+            
+                <tr>
+                    <td>2016</td>
+                    <td>31</td>
+                    <td class="highlight">¥6401</td>
+                    <td>¥203.8</td>
+                </tr>
+            
+                <tr>
+                    <td>2015</td>
+                    <td>63</td>
+                    <td class="highlight">¥12081</td>
+                    <td>¥199.3</td>
+                </tr>
+            
+                    </tbody>
+                </table></div>
+            </div>
+        <div class="section"><h2 class="section-title">🏙️ 城市路线</h2>
+                <h3 class="subsection-title">出发城市</h3>
+                <div class="table-card"><table>
+                    <thead><tr><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">排名</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">城市</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">出发次数</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">消费总额</th></tr></thead>
+                    <tbody><tr><td>1</td><td class="label-cell">北京</td><td>157</td><td class="highlight">¥30574</td></tr><tr><td>2</td><td class="label-cell">郑州</td><td>121</td><td class="highlight">¥22681</td></tr><tr><td>3</td><td class="label-cell">新乡</td><td>62</td><td class="highlight">¥12173</td></tr><tr><td>4</td><td class="label-cell">石家庄</td><td>4</td><td class="highlight">¥491.5</td></tr><tr><td>5</td><td class="label-cell">武汉</td><td>3</td><td class="highlight">¥774</td></tr><tr><td>6</td><td class="label-cell">保定</td><td>2</td><td class="highlight">¥98</td></tr><tr><td>7</td><td class="label-cell">西安</td><td>2</td><td class="highlight">¥264</td></tr><tr><td>8</td><td class="label-cell">哈尔滨</td><td>1</td><td class="highlight">¥409.5</td></tr><tr><td>9</td><td class="label-cell">大连</td><td>1</td><td class="highlight">¥202</td></tr><tr><td>10</td><td class="label-cell">苏州</td><td>1</td><td class="highlight">¥207</td></tr></tbody>
+                </table></div>
+            
+                <h3 class="subsection-title">到达城市</h3>
+                <div class="table-card"><table>
+                    <thead><tr><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">排名</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">城市</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">到达次数</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">消费总额</th></tr></thead>
+                    <tbody><tr><td>1</td><td class="label-cell">北京</td><td>173</td><td class="highlight">¥34153.5</td></tr><tr><td>2</td><td class="label-cell">郑州</td><td>112</td><td class="highlight">¥22223</td></tr><tr><td>3</td><td class="label-cell">新乡</td><td>48</td><td class="highlight">¥7549.5</td></tr><tr><td>4</td><td class="label-cell">石家庄</td><td>5</td><td class="highlight">¥726</td></tr><tr><td>5</td><td class="label-cell">日照</td><td>4</td><td class="highlight">¥714</td></tr><tr><td>6</td><td class="label-cell">武汉</td><td>3</td><td class="highlight">¥625</td></tr><tr><td>7</td><td class="label-cell">大连</td><td>2</td><td class="highlight">¥626</td></tr><tr><td>8</td><td class="label-cell">西安</td><td>2</td><td class="highlight">¥264</td></tr><tr><td>9</td><td class="label-cell">哈尔滨</td><td>1</td><td class="highlight">¥427.5</td></tr><tr><td>10</td><td class="label-cell">保定</td><td>1</td><td class="highlight">¥142</td></tr></tbody>
+                </table></div>
+            
+                <h3 class="subsection-title">热门路线</h3>
+                <div class="table-card"><table>
+                    <thead><tr><th bgcolor="#eaf2ff" style="width:52px;background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">排名</th><th bgcolor="#eaf2ff" style="width:46%;background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">路线</th><th bgcolor="#eaf2ff" style="width:56px;background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">次数</th><th bgcolor="#eaf2ff" style="width:88px;background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">消费总额</th></tr></thead>
+                    <tbody><tr><td>1</td><td class="label-cell route-cell">郑州→北京西</td><td>74</td><td class="highlight">¥11952.5</td></tr><tr><td>2</td><td class="label-cell route-cell">北京西→郑州</td><td>67</td><td class="highlight">¥10407</td></tr><tr><td>3</td><td class="label-cell route-cell">新乡→北京西</td><td>34</td><td class="highlight">¥5291</td></tr><tr><td>4</td><td class="label-cell route-cell">北京西→新乡</td><td>34</td><td class="highlight">¥4552.5</td></tr><tr><td>5</td><td class="label-cell route-cell">北京西→郑州东</td><td>29</td><td class="highlight">¥8862</td></tr><tr><td>6</td><td class="label-cell route-cell">郑州东→北京西</td><td>24</td><td class="highlight">¥7558</td></tr><tr><td>7</td><td class="label-cell route-cell">新乡东→北京西</td><td>24</td><td class="highlight">¥6520</td></tr><tr><td>8</td><td class="label-cell route-cell">北京西→新乡东</td><td>11</td><td class="highlight">¥2836</td></tr><tr><td>9</td><td class="label-cell route-cell">北京丰台→郑州</td><td>7</td><td class="highlight">¥1161</td></tr><tr><td>10</td><td class="label-cell route-cell">郑州→北京丰台</td><td>5</td><td class="highlight">¥639</td></tr></tbody>
+                </table></div>
+            </div>
+            <div class="section">
+                <h2 class="section-title">🚄 常坐列车</h2>
+                <div class="table-card"><table>
+                    <thead>
+                        <tr><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">排名</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">车次</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">乘坐次数</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">消费总额</th></tr>
+                    </thead>
+                    <tbody>
+                <tr>
+                    <td>1</td>
+                    <td class="label-cell">K179</td>
+                    <td>39</td>
+                    <td class="highlight">¥6210</td>
+                </tr>
+            
+                <tr>
+                    <td>2</td>
+                    <td class="label-cell">Z162</td>
+                    <td>26</td>
+                    <td class="highlight">¥3368.5</td>
+                </tr>
+            
+                <tr>
+                    <td>3</td>
+                    <td class="label-cell">K180</td>
+                    <td>19</td>
+                    <td class="highlight">¥2992</td>
+                </tr>
+            
+                <tr>
+                    <td>4</td>
+                    <td class="label-cell">K158</td>
+                    <td>14</td>
+                    <td class="highlight">¥2091.5</td>
+                </tr>
+            
+                <tr>
+                    <td>5</td>
+                    <td class="label-cell">Z502</td>
+                    <td>12</td>
+                    <td class="highlight">¥1864</td>
+                </tr>
+            
+                <tr>
+                    <td>6</td>
+                    <td class="label-cell">K118</td>
+                    <td>12</td>
+                    <td class="highlight">¥1731</td>
+                </tr>
+            
+                <tr>
+                    <td>7</td>
+                    <td class="label-cell">Z285</td>
+                    <td>11</td>
+                    <td class="highlight">¥1730</td>
+                </tr>
+            
+                <tr>
+                    <td>8</td>
+                    <td class="label-cell">K1363</td>
+                    <td>11</td>
+                    <td class="highlight">¥1302</td>
+                </tr>
+            
+                <tr>
+                    <td>9</td>
+                    <td class="label-cell">K590</td>
+                    <td>7</td>
+                    <td class="highlight">¥1192</td>
+                </tr>
+            
+                <tr>
+                    <td>10</td>
+                    <td class="label-cell">G570</td>
+                    <td>7</td>
+                    <td class="highlight">¥2091</td>
+                </tr>
+            </tbody>
+                </table></div>
+            </div>
+        
+            <div class="section">
+                <h2 class="section-title">💺 座位偏好</h2>
+                <div class="table-card"><table>
+                    <thead>
+                        <tr><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">排名</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">座位类型</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">选择次数</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">平均票价</th></tr>
+                    </thead>
+                    <tbody>
+                <tr>
+                    <td>1</td>
+                    <td class="label-cell">硬卧</td>
+                    <td>152</td>
+                    <td class="highlight">¥160.9</td>
+                </tr>
+            
+                <tr>
+                    <td>2</td>
+                    <td class="label-cell">二等座</td>
+                    <td>107</td>
+                    <td class="highlight">¥274.5</td>
+                </tr>
+            
+                <tr>
+                    <td>3</td>
+                    <td class="label-cell">硬座</td>
+                    <td>61</td>
+                    <td class="highlight">¥86.8</td>
+                </tr>
+            
+                <tr>
+                    <td>4</td>
+                    <td class="label-cell">软卧</td>
+                    <td>29</td>
+                    <td class="highlight">¥247.1</td>
+                </tr>
+            
+                <tr>
+                    <td>5</td>
+                    <td class="label-cell">动卧</td>
+                    <td>4</td>
+                    <td class="highlight">¥340</td>
+                </tr>
+            
+                <tr>
+                    <td>6</td>
+                    <td class="label-cell">一等座</td>
+                    <td>1</td>
+                    <td class="highlight">¥253.5</td>
+                </tr>
+            
+                <tr>
+                    <td>7</td>
+                    <td class="label-cell">无座</td>
+                    <td>1</td>
+                    <td class="highlight">¥93</td>
+                </tr>
+            </tbody>
+                </table></div>
+            </div>
+        
+            <div class="section">
+                <h2 class="section-title">⏰ 出发时间</h2>
+                <div class="table-card"><table>
+                    <thead>
+                        <tr><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">排名</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">时间段</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">出发次数</th></tr>
+                    </thead>
+                    <tbody>
+                <tr>
+                    <td>1</td>
+                    <td class="label-cell"><span class="date-text">22:00&#8209;23:00</span></td>
+                    <td>113</td>
+                </tr>
+            
+                <tr>
+                    <td>2</td>
+                    <td class="label-cell"><span class="date-text">00:00&#8209;01:00</span></td>
+                    <td>41</td>
+                </tr>
+            
+                <tr>
+                    <td>3</td>
+                    <td class="label-cell"><span class="date-text">21:00&#8209;22:00</span></td>
+                    <td>40</td>
+                </tr>
+            
+                <tr>
+                    <td>4</td>
+                    <td class="label-cell"><span class="date-text">20:00&#8209;21:00</span></td>
+                    <td>24</td>
+                </tr>
+            
+                <tr>
+                    <td>5</td>
+                    <td class="label-cell"><span class="date-text">19:00&#8209;20:00</span></td>
+                    <td>22</td>
+                </tr>
+            
+                <tr>
+                    <td>6</td>
+                    <td class="label-cell"><span class="date-text">18:00&#8209;19:00</span></td>
+                    <td>20</td>
+                </tr>
+            
+                <tr>
+                    <td>7</td>
+                    <td class="label-cell"><span class="date-text">23:00&#8209;00:00</span></td>
+                    <td>18</td>
+                </tr>
+            
+                <tr>
+                    <td>8</td>
+                    <td class="label-cell"><span class="date-text">15:00&#8209;16:00</span></td>
+                    <td>12</td>
+                </tr>
+            
+                <tr>
+                    <td>9</td>
+                    <td class="label-cell"><span class="date-text">02:00&#8209;03:00</span></td>
+                    <td>8</td>
+                </tr>
+            
+                <tr>
+                    <td>10</td>
+                    <td class="label-cell"><span class="date-text">17:00&#8209;18:00</span></td>
+                    <td>7</td>
+                </tr>
+            </tbody>
+                </table></div>
+            </div>
+        
+            <div class="section">
+                <h2 class="section-title">🧑 乘客统计</h2>
+                <div class="table-card"><table>
+                    <thead>
+                        <tr><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">排名</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">乘客姓名</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">出行次数</th><th bgcolor="#eaf2ff" style="background-color:#eaf2ff;background:#eaf2ff;color:#0f172a;-webkit-text-fill-color:#0f172a;">消费总额</th></tr>
+                    </thead>
+                    <tbody>
+                <tr>
+                    <td>1</td>
+                    <td class="label-cell">刘八</td>
+                    <td>294</td>
+                    <td class="highlight">¥54427</td>
+                </tr>
+            
+                <tr>
+                    <td>2</td>
+                    <td class="label-cell">周十一</td>
+                    <td>36</td>
+                    <td class="highlight">¥7132.5</td>
+                </tr>
+            
+                <tr>
+                    <td>3</td>
+                    <td class="label-cell">黄十</td>
+                    <td>9</td>
+                    <td class="highlight">¥1470</td>
+                </tr>
+            
+                <tr>
+                    <td>4</td>
+                    <td class="label-cell">吴十二</td>
+                    <td>4</td>
+                    <td class="highlight">¥606</td>
+                </tr>
+            
+                <tr>
+                    <td>5</td>
+                    <td class="label-cell">赵六</td>
+                    <td>3</td>
+                    <td class="highlight">¥326</td>
+                </tr>
+            
+                <tr>
+                    <td>6</td>
+                    <td class="label-cell">孙十四</td>
+                    <td>2</td>
+                    <td class="highlight">¥552</td>
+                </tr>
+            
+                <tr>
+                    <td>7</td>
+                    <td class="label-cell">王五</td>
+                    <td>2</td>
+                    <td class="highlight">¥506</td>
+                </tr>
+            
+                <tr>
+                    <td>8</td>
+                    <td class="label-cell">李四</td>
+                    <td>2</td>
+                    <td class="highlight">¥322</td>
+                </tr>
+            
+                <tr>
+                    <td>9</td>
+                    <td class="label-cell">张三</td>
+                    <td>1</td>
+                    <td class="highlight">¥182</td>
+                </tr>
+            
+                <tr>
+                    <td>10</td>
+                    <td class="label-cell">郑十三</td>
+                    <td>1</td>
+                    <td class="highlight">¥81</td>
+                </tr>
+            
+                <tr>
+                    <td>11</td>
+                    <td class="label-cell">陈七</td>
+                    <td>1</td>
+                    <td class="highlight">¥19.5</td>
+                </tr>
+            </tbody>
+                </table></div>
+            </div>
+        
+        </div>
+        <div class="footer" bgcolor="#f7faff" style="text-align:center;padding:14px 12px 16px;color:#64748b;-webkit-text-fill-color:#64748b;border-top:1px solid #e2ebfb;font-size:13px;background-color:#f7faff;background:#f7faff;">
+            <p>报告生成时间: <span class="date-text">2026&#8209;09&#8209;24 20&#8202;:&thinsp;24&#8202;:&thinsp;59</span></p>
+        </div></div></body></html>
