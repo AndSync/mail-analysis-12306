@@ -2,7 +2,7 @@
 
 从邮箱读取 12306 购票/退票/改签通知邮件，自动生成一份 HTML 出行统计报告，并发送到你的邮箱。
 
-- 纯 Python 标准库实现，零第三方依赖
+- Node.js 实现，安装即用，无需额外运行时
 - 支持 ZCode、Claude Code、Codex、Trae 等主流 Agent
 - 统计口径严谨：真实乘坐、实际净支出、退改扣费分别核算
 
@@ -51,19 +51,19 @@
 
 ```toml
 [mcp_servers.mail12306]
-command = "python"
-args = ["/path/to/mail-analysis-12306/src/mcp_server.py"]
+command = "node"
+args = ["/path/to/mail-analysis-12306/dist/mcp/server.js"]
 env = { MAIL12306_SENDER_EMAIL = "你的邮箱", MAIL12306_SENDER_PASSWORD = "授权码", MAIL12306_RECIPIENT_EMAIL = "收件人@example.com" }
 ```
 
 ### 在 Trae 等其他 MCP Agent 中
 
-在 MCP 设置里添加 stdio 服务器：command 填 `python`，args 填 `src/mcp_server.py` 的绝对路径，env 里填 `MAIL12306_SENDER_EMAIL` / `MAIL12306_SENDER_PASSWORD` / `MAIL12306_RECIPIENT_EMAIL`。
+在 MCP 设置里添加 stdio 服务器：command 填 `node`，args 填 `dist/mcp/server.js` 的绝对路径，env 里填 `MAIL12306_SENDER_EMAIL` / `MAIL12306_SENDER_PASSWORD` / `MAIL12306_RECIPIENT_EMAIL`。
 
 ### 命令行
 
 ```bash
-python src/main.py --config /path/to/config.json
+node dist/cli.js --config /path/to/config.json
 ```
 
 ---
@@ -137,7 +137,8 @@ python src/main.py --config /path/to/config.json
 
 ## 技术细节
 
-- 纯 Python 标准库（imaplib / smtplib / email / html.parser / re / json），零第三方依赖
+- Node.js（TypeScript），esbuild 打包单文件，无运行时依赖
+- 依赖：imapflow（IMAP）、mailparser（MIME 解析）、nodemailer（SMTP）、@modelcontextprotocol/sdk
 - 详见 [docs/TECHNICAL.md](docs/TECHNICAL.md)
 
 ## License

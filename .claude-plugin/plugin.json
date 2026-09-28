@@ -1,6 +1,6 @@
 {
   "name": "mail-analysis-12306",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "分析邮箱中的 12306 购票/退票/改签邮件，生成出行统计 HTML 报告并发送到你的邮箱",
   "author": {
     "name": "Lizhimin"
@@ -9,9 +9,9 @@
   "mcpServers": {
     "mail12306": {
       "type": "stdio",
-      "command": "python",
+      "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/src/mcp_server.py"
+        "${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"
       ]
     }
   }

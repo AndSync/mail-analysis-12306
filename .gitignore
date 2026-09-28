@@ -6,12 +6,9 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -20,11 +17,22 @@ wheels/
 .installed.cfg
 *.egg
 
+# Node
+node_modules/
+*.tsbuildinfo
+# tsc 中间产物（esbuild 已 bundle 进 dist/cli.js 与 dist/mcp/server.js）
+dist/lib/
+dist/**/*.d.ts
+dist/**/*.d.ts.map
+
 # 日志文件
 *.log
 
 # HTML报告
 12306_report_*.html
+
+# 测试/对账数据（含个人出行信息，不入库）
+fixtures/
 
 # IDE
 .idea/

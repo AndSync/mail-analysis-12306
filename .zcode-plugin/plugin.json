@@ -1,6 +1,6 @@
 {
   "name": "mail-analysis-12306",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "分析邮箱中的 12306 购票/退票/改签邮件，生成出行统计 HTML 报告并发送到你的邮箱。首次使用请在插件详情→高级设置中填写邮箱信息",
   "author": { "name": "Lizhimin" },
   "skills": "./skills",

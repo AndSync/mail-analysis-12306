@@ -2,8 +2,8 @@
   "mcpServers": {
     "mail12306": {
       "type": "stdio",
-      "command": "python",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp_server.py"],
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"],
       "env": {
         "MAIL12306_SENDER_EMAIL": "${user_config.sender_email}",
         "MAIL12306_SENDER_PASSWORD": "${user_config.sender_password}",

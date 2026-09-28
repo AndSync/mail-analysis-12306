@@ -7,10 +7,10 @@ description: 分析邮箱中的 12306 火车票购票/退票/改签邮件，生�
 
 从邮箱读取 12306 购票/退票/改签通知邮件，生成 HTML 出行统计报告，并通过 SMTP 发送到指定邮箱。
 
-核心是随仓库分发的独立 Python 工具（仅标准库、零第三方依赖）：`src/main.py` + `src/engine/`。它可以通过三种方式使用：
+核心是随仓库分发的 Node.js 工具（TypeScript，esbuild 打单文件，无运行时依赖）：`src/cli.ts` + `src/lib/`。它可以通过三种方式使用：
 
-1. **命令行**（任何环境）：`python src/main.py --config <配置文件路径>`
-2. **MCP 服务器**（支持 MCP 的 agent，如 ZCode/Claude Code/Codex/Trae）：`python src/mcp_server.py`
+1. **命令行**（任何环境）：`node dist/cli.js --config <配置文件路径>`
+2. **MCP 服务器**（支持 MCP 的 agent，如 ZCode/Claude Code/Codex/Trae）：`node dist/mcp/server.js`
 3. **可视化配置**（ZCode 专属）：插件详情 → 高级设置表单，值经 MCP 注入
 
 ## 工作流程
@@ -38,11 +38,11 @@ description: 分析邮箱中的 12306 火车票购票/退票/改签邮件，生�
 
 ### 配置方式（按使用场景）
 
-- **命令行**：写配置文件（见 `config/config.json` 模板），`python src/main.py --config /path/to/config.json`。也可用 `MAIL12306_CONFIG` 环境变量指向配置文件。
+- **命令行**：写配置文件（见 `config/config.json` 模板），`node dist/cli.js --config /path/to/config.json`。也可用 `MAIL12306_CONFIG` 环境变量指向配置文件。
 - **MCP 服务器**：`save_mail_config` 工具写入用户目录配置文件；或用环境变量 `MAIL12306_SENDER_EMAIL` / `MAIL12306_SENDER_PASSWORD` / `MAIL12306_RECIPIENT_EMAIL`。
 - **ZCode 可视化**：插件详情 → 高级设置填写，重启会话生效。
 
-## MCP 工具（`src/mcp_server.py`）
+## MCP 工具（`dist/mcp/server.js`）
 
 | 工具 | 作用 |
 |------|------|
