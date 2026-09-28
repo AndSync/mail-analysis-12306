@@ -1,5 +1,5 @@
 /**
- * 后台分析管线（对应 src/main.py）。
+ * 后台分析管线。
  * 读取邮件 → 解析票务记录 → 统计分析 → 生成 HTML → SMTP 发送。
  *
  * 由 MCP 服务器以 detached 子进程方式启动，stdout 重定向到 run.log。

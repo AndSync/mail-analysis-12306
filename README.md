@@ -20,7 +20,11 @@
 - **出发时间**：常出行的时段分布
 - **乘客统计**：每位乘车人的出行次数与消费
 
-> 📄 **效果预览**：[查看示例报告](https://htmlpreview.github.io/?https://github.com/AndSync/mail-analysis-12306/blob/main/docs/sample-report.html)
+> 📄 **效果预览**（示例数据）：
+>
+> [![12306 出行统计报告示例](assets/sample-report-preview.png)](assets/sample-report-preview.png)
+>
+> HTML 文件：[docs/sample-report.html](docs/sample-report.html)
 
 ## 使用方式
 
@@ -106,7 +110,7 @@ node dist/cli.js --config /path/to/config.json
 }
 ```
 
-> 12306 邮件通常在「网上购票」文件夹（QQ 邮箱）。设置 `mailbox_name` 可大幅加快读取；留空则扫描全邮箱。
+> 如需加快扫描速度（可选）：12306 不会自动归档邮件，扫描全邮箱较慢。可自行新建一个专用文件夹（名字随意，如「网上购票」），添加收信规则（发件人含 `12306` 的邮件自动移入该文件夹）并执行；创建了什么名字，`mailbox_name` 就填什么。留空则扫描全邮箱。
 
 ---
 

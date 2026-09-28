@@ -1,22 +1,3 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-downloads/
-eggs/
-.eggs/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
 # Node
 node_modules/
 *.tsbuildinfo
@@ -44,11 +25,3 @@ fixtures/
 # 操作系统
 .DS_Store
 Thumbs.db
-
-# 虚拟环境
-venv/
-env/
-ENV/
-
-# 配置文件（包含敏感信息，建议不要提交到版本控制）
-# config.json

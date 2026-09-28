@@ -13,7 +13,9 @@
   "scripts": {
     "build": "tsc && node scripts/build-mcp.mjs",
     "typecheck": "tsc --noEmit",
-    "verify": "node scripts/verify-parity.mjs"
+    "verify:parser": "node scripts/verify-parser.mjs",
+    "verify:parity": "node scripts/verify-parity.mjs",
+    "verify": "npm run verify:parser && npm run verify:parity"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.1",

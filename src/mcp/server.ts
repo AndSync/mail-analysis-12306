@@ -1,6 +1,6 @@
 /**
  * ZCode MCP 服务器：12306 邮件分析（stdio，Node 实现）。
- * 移植自 src/mcp_server.py —— 4 个工具、env 优先级、后台分离进程、日志轮询。
+ * 4 个工具、env 优先级、后台分离进程、日志轮询。
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
