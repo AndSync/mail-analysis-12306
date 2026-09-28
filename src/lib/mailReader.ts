@@ -205,7 +205,9 @@ export class MailReader {
       if (mailCount === 0) return emailsData;
 
       const searchCriteria = this._buildSearchCriteria(startDate, endDate);
-      const searchResult = await this.client.search(searchCriteria);
+      // 必须 { uid: true }：否则 imapflow 走普通 SEARCH 返回序号，下面按 UID fetch 会漏掉
+      // 序号范围之外的消息（UID 单调递增，漏掉的恰是 UID 更大的新邮件）。
+      const searchResult = await this.client.search(searchCriteria, { uid: true });
       if (!searchResult || searchResult.length === 0) return emailsData;
 
       let uids: number[] = searchResult;

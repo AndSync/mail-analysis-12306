@@ -57155,7 +57155,7 @@ ${body}`.toLowerCase();
       const mailCount = mailbox.exists;
       if (mailCount === 0) return emailsData;
       const searchCriteria = this._buildSearchCriteria(startDate, endDate);
-      const searchResult = await this.client.search(searchCriteria);
+      const searchResult = await this.client.search(searchCriteria, { uid: true });
       if (!searchResult || searchResult.length === 0) return emailsData;
       let uids = searchResult;
       if (limit && uids.length > limit) uids = uids.slice(-limit);
