@@ -4,7 +4,7 @@
     {
       "name": "mail-analysis-12306",
       "source": "./",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "description": "分析邮箱中的 12306 购票/退票/改签邮件，生成出行统计 HTML 报告并发送到你的邮箱",
       "displayName": "12306 Mail Analysis",
       "displayName_i18n": {
@@ -15,7 +15,7 @@
       },
       "category": "productivity",
       "author": {
-        "name": "ZCodeProject"
+        "name": "Lizhimin"
       },
       "icon": "https://raw.githubusercontent.com/AndSync/mail-analysis-12306/main/assets/icon.png"
     }

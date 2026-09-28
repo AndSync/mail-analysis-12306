@@ -33,7 +33,7 @@ TERMINAL_MARKERS = [
     '未能从邮件中提取到任何票务记录', '分析报告为空', '用户中断程序',
 ]
 
-SERVER_INFO = {"name": "mail-analysis-12306", "version": "0.6.1"}
+SERVER_INFO = {"name": "mail-analysis-12306", "version": "0.6.2"}
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
